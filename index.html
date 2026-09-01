@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>ระบบจัดการสต็อกสินค้า & รายงานกำไร-ขาดทุน (Google Sheets)</title>
+  <title>Lebon Toy — ระบบจัดการสต็อก & วิเคราะห์กำไร</title>
   
   <!-- PWA Manifest & Meta -->
   <link rel="manifest" href="manifest.json">
@@ -56,8 +56,8 @@
             🧸
           </div>
           <div>
-            <h1 class="text-base sm:text-lg font-bold tracking-tight">Toy & Art Toy Hub</h1>
-            <p class="text-[11px] text-indigo-200">ระบบสต็อก & วิเคราะห์กำไร ร้านของเล่น, Squishy & Art Toy</p>
+            <h1 class="text-base sm:text-lg font-bold tracking-tight">Lebon Toy Stock Hub</h1>
+            <p class="text-[11px] text-indigo-200">ระบบสต็อก & วิเคราะห์กำไร ร้าน Lebon Toy (Art Toy, Squishy & สำเพ็ง)</p>
           </div>
         </div>
 
@@ -156,7 +156,7 @@
           <div class="text-xs text-slate-400 mt-1">Margin: <span id="dash-today-margin" class="font-semibold text-emerald-600">0%</span></div>
         </div>
 
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 admin-only">
           <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
             <span>มูลค่าสต็อกในคลัง</span>
             <span class="text-indigo-500 text-base">🏢</span>
@@ -316,7 +316,7 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">ประเภทรายการ</label>
                 <select id="pos-type-select" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none">
@@ -331,6 +331,15 @@
                 <input type="number" id="pos-qty-input" value="1" min="1"
                   class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold text-center focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               </div>
+
+              <div>
+                <label id="pos-unit-price-label" class="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                  <span>ราคาขายจริง/ชิ้น (฿)</span>
+                  <span class="text-[10px] text-indigo-600 font-normal">แก้ไขได้</span>
+                </label>
+                <input type="number" id="pos-unit-price-input" min="0" step="any" placeholder="0.00"
+                  class="w-full p-2.5 border border-indigo-200 bg-indigo-50/20 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              </div>
             </div>
 
             <div class="grid grid-cols-2 gap-4">
@@ -341,8 +350,33 @@
               </div>
               <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">หมายเหตุ (ถ้ามี)</label>
-                <input type="text" id="pos-note-input" placeholder="เช่น ขายหน้าร้าน, เสียหาย"
+                <input type="text" id="pos-note-input" placeholder="เช่น ขายหน้าร้าน, รับของล็อตใหม่"
                   class="w-full p-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              </div>
+            </div>
+
+            <!-- Photo Upload / Camera Capture Section -->
+            <div class="pt-3 border-t border-slate-100 space-y-2">
+              <label class="block text-xs font-semibold text-slate-600 flex items-center justify-between">
+                <span>📸 ถ่ายรูปหลักฐาน / ใบเสร็จ / กล่องสินค้า</span>
+                <span class="text-[11px] text-slate-400 font-normal">(บันทึกลง Google Drive)</span>
+              </label>
+
+              <input type="file" id="pos-photo-input" accept="image/*" capture="environment" class="hidden">
+              
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="document.getElementById('pos-photo-input').click()" 
+                  class="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 border border-slate-200">
+                  <span>📷</span> ถ่ายรูป / แนบรูปภาพ
+                </button>
+                <button type="button" id="btn-remove-photo" class="hidden py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-semibold transition">
+                  🗑️ ลบรูป
+                </button>
+              </div>
+
+              <!-- Photo Preview Thumbnail -->
+              <div id="pos-photo-preview-container" class="hidden p-2 rounded-xl border border-indigo-200 bg-slate-50 flex items-center justify-center max-h-48">
+                <img id="pos-photo-preview-img" src="" alt="Receipt Preview" class="max-h-44 object-contain rounded-lg shadow-sm">
               </div>
             </div>
 
@@ -545,6 +579,7 @@
                 <th class="px-4 py-3.5 text-right">จำนวน</th>
                 <th class="px-4 py-3.5 text-right">ยอดขาย</th>
                 <th class="px-4 py-3.5 text-right admin-only">กำไร</th>
+                <th class="px-4 py-3.5 text-center">รูปหลักฐาน</th>
                 <th class="px-4 py-3.5">ผู้ทำรายการ/หมายเหตุ</th>
               </tr>
             </thead>
@@ -785,7 +820,7 @@
         <div class="w-14 h-14 rounded-2xl bg-indigo-600 text-white mx-auto flex items-center justify-center text-3xl shadow-lg shadow-indigo-200 font-bold">
           🧸
         </div>
-        <h2 class="text-xl font-bold text-slate-800">เข้าสู่ระบบร้านของเล่น</h2>
+        <h2 class="text-xl font-bold text-slate-800">เข้าสู่ระบบร้าน Lebon Toy</h2>
         <p class="text-xs text-slate-400">ระบบสต็อก & กำไร (Art Toy, Squishy & สำเพ็ง)</p>
       </div>
 
@@ -854,12 +889,12 @@
 
         <div>
           <label class="block font-semibold text-slate-600 mb-1">ชื่อสินค้า *</label>
-          <input type="text" id="modal-product-name" required placeholder="เช่น กาแฟอาราบิก้า คั่วกลาง 250g"
+          <input type="text" id="modal-product-name" required placeholder="เช่น กล่องสุ่ม Molly Space, Squishy มะม่วง"
             class="w-full p-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
         </div>
 
         <div class="grid grid-cols-3 gap-3">
-          <div>
+          <div class="admin-only">
             <label class="block font-semibold text-slate-600 mb-1">ต้นทุน (฿)</label>
             <input type="number" id="modal-product-cost" step="0.01" min="0" value="0"
               class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
@@ -876,7 +911,7 @@
           </div>
         </div>
 
-        <div class="p-2.5 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between">
+        <div class="p-2.5 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between admin-only">
           <span class="text-slate-500">กำไรคาดการณ์ต่อชิ้น:</span>
           <span id="modal-profit-preview" class="text-xs font-semibold text-emerald-600">กำไร: ฿0 (0.0%)</span>
         </div>
@@ -900,7 +935,29 @@
         </div>
 
       </form>
+    </div>
+  </div>
 
+  <!-- ========================================================================= -->
+  <!-- MODAL: IMAGE VIEWER / RECEIPT PHOTO -->
+  <!-- ========================================================================= -->
+  <div id="image-viewer-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-xl w-full p-4 space-y-3 relative">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h3 id="image-viewer-title" class="font-bold text-slate-800 text-sm flex items-center gap-2">
+          <span>📸</span> รูปถ่ายหลักฐานทำรายการ
+        </h3>
+        <button onclick="App.closeImageViewerModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+      <div class="flex items-center justify-center bg-slate-100 rounded-xl overflow-hidden min-h-[250px] max-h-[65vh]">
+        <img id="image-viewer-img" src="" alt="Full Preview" class="max-h-[63vh] object-contain rounded-lg shadow-sm">
+      </div>
+      <div class="flex justify-between items-center pt-1">
+        <span class="text-xs text-slate-400" id="image-viewer-subtitle"></span>
+        <a id="image-viewer-link" href="#" target="_blank" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+          <span>↗️</span> เปิดดูรูปเต็ม
+        </a>
+      </div>
     </div>
   </div>
 

@@ -1,5 +1,6 @@
 /**
  * Main Application Logic & UI Interactions
+ * รองรับการบันทึกภาพถ่ายหลักฐานรับเข้า-เบิกจ่าย (Google Drive Photo Integration)
  */
 
 const App = {
@@ -11,6 +12,7 @@ const App = {
   summary: {},
   selectedCategory: 'ALL',
   searchQuery: '',
+  currentAttachedPhotoBase64: null, // เก็บรูปภาพ Base64 ที่ถ่าย/แนบมา
 
   async init() {
     this.bindAuth();
@@ -220,11 +222,15 @@ const App = {
             </td>
           ` : '';
 
+          const photoBtn = t.imageUrl ? `
+            <button onclick="App.openImageViewerModal('${t.imageUrl}', '${t.productName}', '${t.type}')" class="ml-1 text-indigo-600 hover:text-indigo-800 text-xs" title="ดูรูปถ่าย">📸</button>
+          ` : '';
+
           return `
             <tr class="border-b border-slate-100 text-sm">
               <td class="py-2.5 text-slate-500">${new Date(t.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
               <td class="py-2.5">${typeBadge}</td>
-              <td class="py-2.5 font-medium text-slate-800">${t.productName}</td>
+              <td class="py-2.5 font-medium text-slate-800">${t.productName} ${photoBtn}</td>
               <td class="py-2.5 text-right">${t.quantity}</td>
               ${profitCell}
             </tr>
@@ -343,7 +349,7 @@ const App = {
     const isAdmin = AuthManager.isAdmin();
 
     if (this.transactions.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">ยังไม่มีประวัติการทำรายการ</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="py-8 text-center text-slate-400">ยังไม่มีประวัติการทำรายการ</td></tr>`;
       return;
     }
 
@@ -363,6 +369,13 @@ const App = {
 
       const profitCell = isAdmin ? `<td class="px-4 py-3 text-right">${profitDisplay}</td>` : '';
 
+      const photoButton = t.imageUrl ? `
+        <button onclick="App.openImageViewerModal('${t.imageUrl}', '${t.productName}', '${timeStr}')" 
+          class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition">
+          <span>📸</span> ดูรูป
+        </button>
+      ` : '<span class="text-slate-300 text-xs">-</span>';
+
       return `
         <tr class="border-b border-slate-100 hover:bg-slate-50 transition text-sm">
           <td class="px-4 py-3 font-mono text-xs text-slate-400">${t.transId}</td>
@@ -372,6 +385,7 @@ const App = {
           <td class="px-4 py-3 text-right font-medium text-slate-700">${t.quantity.toLocaleString()}</td>
           <td class="px-4 py-3 text-right text-slate-700">${t.totalRevenue ? '฿' + t.totalRevenue.toLocaleString() : '-'}</td>
           ${profitCell}
+          <td class="px-4 py-3 text-center">${photoButton}</td>
           <td class="px-4 py-3 text-slate-500 text-xs">${t.operator || 'Staff'} ${t.note ? `<br><span class="text-slate-400">(${t.note})</span>` : ''}</td>
         </tr>
       `;
@@ -379,23 +393,71 @@ const App = {
   },
 
   // =========================================================================
-  // USER MANAGEMENT & PASSWORD SETTINGS (ใหม่)
+  // IMAGE VIEWER MODAL & PHOTO CAPTURE
+  // =========================================================================
+
+  openImageViewerModal(imageUrl, title, subtitle) {
+    const modal = document.getElementById('image-viewer-modal');
+    const img = document.getElementById('image-viewer-img');
+    const titleEl = document.getElementById('image-viewer-title');
+    const subEl = document.getElementById('image-viewer-subtitle');
+    const linkEl = document.getElementById('image-viewer-link');
+
+    if (img) img.src = imageUrl;
+    if (titleEl) titleEl.innerHTML = `<span>📸</span> รูปถ่าย: ${title}`;
+    if (subEl) subEl.textContent = subtitle ? `บันทึกเมื่อ: ${subtitle}` : '';
+    if (linkEl) linkEl.href = imageUrl;
+
+    modal?.classList.remove('hidden');
+  },
+
+  closeImageViewerModal() {
+    document.getElementById('image-viewer-modal')?.classList.add('hidden');
+  },
+
+  // บีบอัดรูปภาพผ่าน Canvas (ลดขนาดเหลือ ~100-200KB เพื่ออัปโหลดได้รวดเร็ว)
+  compressImage(file, maxWidth = 1000, quality = 0.75) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressedBase64);
+        };
+      };
+      reader.onerror = error => reject(error);
+    });
+  },
+
+  // =========================================================================
+  // USER MANAGEMENT & PASSWORD SETTINGS
   // =========================================================================
   
   bindUserManagement() {
-    // Form Save User
     document.getElementById('form-user')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       await this.saveUserFromModal();
     });
 
-    // Form Change My Password
     document.getElementById('form-change-my-password')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       await this.submitChangeMyPassword();
     });
 
-    // Form Admin Reset Password
     document.getElementById('form-admin-reset-pass')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       await this.submitAdminResetPassword();
@@ -570,7 +632,8 @@ const App = {
       this.showToast(res.message || `รีเซ็ตรหัสผ่านสำหรับ ${username} สำเร็จ!`, 'success');
       this.closeAdminResetPassModal();
     } catch (err) {
-      this.showToast('รีเซ็ตรหัสผ่านไม่สำเร็จ: ' + err.message, 'error');
+      const msg = (err.message || 'รีเซ็ตรหัสผ่านไม่สำเร็จ').replace(/^Error:\s*/i, '');
+      this.showToast(msg, 'error');
     } finally {
       this.showLoading(false);
     }
@@ -578,24 +641,39 @@ const App = {
 
   async submitChangeMyPassword() {
     const user = AuthManager.getCurrentUser();
-    if (!user) return;
+    if (!user || !user.username) {
+      this.showToast('กรุณาเข้าสู่ระบบก่อนเปลี่ยนรหัสผ่าน', 'warning');
+      return;
+    }
 
-    const oldPassword = document.getElementById('change-old-password').value;
-    const newPassword = document.getElementById('change-new-password').value;
-    const confirmPassword = document.getElementById('change-confirm-password').value;
+    const oldPassword = document.getElementById('change-old-password').value.trim();
+    const newPassword = document.getElementById('change-new-password').value.trim();
+    const confirmPassword = document.getElementById('change-confirm-password').value.trim();
+
+    if (!oldPassword) {
+      this.showToast('กรุณากรอกรหัสผ่านเดิม', 'warning');
+      return;
+    }
+
+    if (!newPassword || newPassword.length < 4) {
+      this.showToast('รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร', 'warning');
+      return;
+    }
 
     if (newPassword !== confirmPassword) {
       this.showToast('รหัสผ่านใหม่และการยืนยันรหัสผ่านไม่ตรงกัน', 'warning');
       return;
     }
 
-    if (newPassword.length < 4) {
-      this.showToast('รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร', 'warning');
-      return;
-    }
+    const submitBtn = document.getElementById('btn-submit-change-pass');
 
     try {
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span>⏳</span> กำลังบันทึก...';
+      }
       this.showLoading(true);
+
       const res = await ApiService.changePassword({
         username: user.username,
         oldPassword: oldPassword,
@@ -608,14 +686,19 @@ const App = {
       document.getElementById('change-new-password').value = '';
       document.getElementById('change-confirm-password').value = '';
     } catch (err) {
-      this.showToast('เปลี่ยนรหัสผ่านไม่สำเร็จ: ' + err.message, 'error');
+      const msg = (err.message || 'เปลี่ยนรหัสผ่านไม่สำเร็จ').replace(/^Error:\s*/i, '');
+      this.showToast(msg, 'error');
     } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>🔐</span> บันทึกรหัสผ่านใหม่';
+      }
       this.showLoading(false);
     }
   },
 
   // =========================================================================
-  // POS & PRODUCT ACTIONS
+  // POS & PRODUCT ACTIONS (พร้อมระบบถ่ายรูป)
   // =========================================================================
 
   bindPosActions() {
@@ -624,6 +707,44 @@ const App = {
       document.getElementById('pos-operator-input').value = user.fullName || user.username;
     }
 
+    // จัดการการอัปโหลด/ถ่ายรูปหลักฐาน
+    const photoInput = document.getElementById('pos-photo-input');
+    const photoPreviewContainer = document.getElementById('pos-photo-preview-container');
+    const photoPreviewImg = document.getElementById('pos-photo-preview-img');
+    const btnRemovePhoto = document.getElementById('btn-remove-photo');
+
+    if (photoInput) {
+      photoInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+          this.showLoading(true);
+          const base64 = await this.compressImage(file);
+          this.currentAttachedPhotoBase64 = base64;
+          
+          if (photoPreviewImg) photoPreviewImg.src = base64;
+          photoPreviewContainer?.classList.remove('hidden');
+          btnRemovePhoto?.classList.remove('hidden');
+          this.showToast('แนบรูปภาพเรียบร้อยแล้ว', 'success');
+        } catch (err) {
+          this.showToast('ไม่สามารถประมวลผลรูปภาพได้', 'error');
+        } finally {
+          this.showLoading(false);
+        }
+      });
+    }
+
+    if (btnRemovePhoto) {
+      btnRemovePhoto.addEventListener('click', () => {
+        this.currentAttachedPhotoBase64 = null;
+        if (photoInput) photoInput.value = '';
+        photoPreviewContainer?.classList.add('hidden');
+        btnRemovePhoto.classList.add('hidden');
+      });
+    }
+
+    // กล้องสแกนเนอร์บาร์โค้ด
     const btnToggleCam = document.getElementById('btn-toggle-camera');
     if (btnToggleCam) {
       btnToggleCam.addEventListener('click', async () => {
@@ -654,7 +775,29 @@ const App = {
       });
     }
 
-    ['pos-qty-input', 'pos-type-select'].forEach(id => {
+    const posTypeSelect = document.getElementById('pos-type-select');
+    if (posTypeSelect) {
+      posTypeSelect.addEventListener('change', () => {
+        const productId = document.getElementById('pos-product-select')?.value;
+        const product = this.products.find(p => p.productId === productId);
+        const type = posTypeSelect.value;
+        const labelEl = document.getElementById('pos-unit-price-label');
+        const priceInput = document.getElementById('pos-unit-price-input');
+
+        if (type === 'OUT') {
+          if (labelEl) labelEl.innerHTML = '<span>ราคาขายจริง/ชิ้น (฿)</span> <span class="text-[10px] text-indigo-600 font-normal">แก้ไขได้</span>';
+          if (priceInput && product) priceInput.value = product.salePrice || 0;
+        } else if (type === 'IN') {
+          if (labelEl) labelEl.innerHTML = '<span>ต้นทุนรับเข้า/ชิ้น (฿)</span> <span class="text-[10px] text-emerald-600 font-normal">แก้ไขได้</span>';
+          if (priceInput && product) priceInput.value = product.costPrice || 0;
+        } else {
+          if (labelEl) labelEl.innerHTML = '<span>ยอดสต็อกเป้าหมาย</span>';
+        }
+        this.calculatePosLiveProfit();
+      });
+    }
+
+    ['pos-qty-input', 'pos-unit-price-input'].forEach(id => {
       document.getElementById(id)?.addEventListener('input', () => this.calculatePosLiveProfit());
     });
 
@@ -689,6 +832,20 @@ const App = {
     document.getElementById('pos-info-cost').textContent = `฿${(product.costPrice || 0).toLocaleString()}`;
     document.getElementById('pos-info-sale').textContent = `฿${(product.salePrice || 0).toLocaleString()}`;
 
+    // ใส่ราคาตามประเภทรายการอัตโนมัติ (แต่ผู้ใช้แก้ได้)
+    const type = document.getElementById('pos-type-select')?.value || 'OUT';
+    const priceInput = document.getElementById('pos-unit-price-input');
+    const labelEl = document.getElementById('pos-unit-price-label');
+
+    if (priceInput) {
+      priceInput.value = type === 'OUT' ? product.salePrice : product.costPrice;
+    }
+    if (labelEl) {
+      labelEl.innerHTML = type === 'OUT' 
+        ? '<span>ราคาขายจริง/ชิ้น (฿)</span> <span class="text-[10px] text-indigo-600 font-normal">แก้ไขได้</span>'
+        : '<span>ต้นทุนรับเข้า/ชิ้น (฿)</span> <span class="text-[10px] text-emerald-600 font-normal">แก้ไขได้</span>';
+    }
+
     this.calculatePosLiveProfit();
   },
 
@@ -696,6 +853,9 @@ const App = {
     const productId = document.getElementById('pos-product-select')?.value;
     const type = document.getElementById('pos-type-select')?.value;
     const qty = Number(document.getElementById('pos-qty-input')?.value) || 0;
+    const priceInputVal = document.getElementById('pos-unit-price-input')?.value;
+    const hasCustomPrice = priceInputVal !== undefined && priceInputVal !== null && priceInputVal.trim() !== '' && !isNaN(Number(priceInputVal));
+    const customPrice = hasCustomPrice ? Number(priceInputVal) : null;
     const liveProfitCard = document.getElementById('pos-live-profit-card');
 
     if (!liveProfitCard || !AuthManager.isAdmin()) return;
@@ -707,15 +867,18 @@ const App = {
     }
 
     liveProfitCard.classList.remove('hidden');
-    const revenue = qty * product.salePrice;
-    const cost = qty * product.costPrice;
+    
+    // ใช้ราคาขายจริงที่กรอกในฟอร์ม (รองรับราคา 0 บาท สำหรับของตัวโชว์/ชำรุด)
+    const actualSalePrice = (customPrice !== null && customPrice >= 0) ? customPrice : (product.salePrice || 0);
+    const revenue = qty * actualSalePrice;
+    const cost = qty * (product.costPrice || 0);
     const profit = revenue - cost;
     const margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
 
     document.getElementById('pos-live-rev').textContent = `฿${revenue.toLocaleString()}`;
     document.getElementById('pos-live-cost').textContent = `฿${cost.toLocaleString()}`;
     const elProfit = document.getElementById('pos-live-profit');
-    elProfit.textContent = `+฿${profit.toLocaleString()} (${margin}%)`;
+    elProfit.textContent = `${profit >= 0 ? '+' : ''}฿${profit.toLocaleString()} (${margin}%)`;
     elProfit.className = profit >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
   },
 
@@ -724,6 +887,9 @@ const App = {
     const productId = document.getElementById('pos-product-select')?.value;
     const type = document.getElementById('pos-type-select')?.value;
     const qty = Number(document.getElementById('pos-qty-input')?.value) || 0;
+    const priceInputVal = document.getElementById('pos-unit-price-input')?.value;
+    const hasCustomPrice = priceInputVal !== undefined && priceInputVal !== null && priceInputVal.trim() !== '' && !isNaN(Number(priceInputVal));
+    const customPrice = hasCustomPrice ? Number(priceInputVal) : null;
     const operator = document.getElementById('pos-operator-input')?.value || (user ? user.fullName : 'Staff');
     const note = document.getElementById('pos-note-input')?.value || '';
 
@@ -736,19 +902,32 @@ const App = {
       return;
     }
 
+    const product = this.products.find(p => p.productId === productId);
+
     try {
       this.showLoading(true);
       const res = await ApiService.addTransaction({
         productId,
         type,
         quantity: qty,
+        salePrice: (type === 'OUT' && customPrice !== null && customPrice >= 0) ? customPrice : (product ? product.salePrice : undefined),
+        costPrice: (type === 'IN' && customPrice !== null && customPrice >= 0) ? customPrice : (product ? product.costPrice : undefined),
         operator,
-        note
+        note,
+        role: (user && user.role) ? user.role : 'staff',
+        imageBase64: this.currentAttachedPhotoBase64
       });
 
-      this.showToast(res.message || 'บันทึกรายการสำเร็จ!', 'success');
+      this.showToast(res.message || 'บันทึกรายการและตัดสต็อกสำเร็จ!', 'success');
+      
+      // ล้างฟอร์มและรูปถ่าย
       document.getElementById('pos-qty-input').value = '1';
       document.getElementById('pos-note-input').value = '';
+      this.currentAttachedPhotoBase64 = null;
+      document.getElementById('pos-photo-input').value = '';
+      document.getElementById('pos-photo-preview-container')?.classList.add('hidden');
+      document.getElementById('btn-remove-photo')?.classList.add('hidden');
+
       await this.refreshData();
       this.updatePosProductInfo(productId);
     } catch (err) {
@@ -782,10 +961,10 @@ const App = {
 
   openAddProductModal() {
     document.getElementById('modal-product-title').textContent = '➕ เพิ่มสินค้าใหม่';
-    document.getElementById('modal-product-id').value = 'P' + String(this.products.length + 1).padStart(3, '0');
+    document.getElementById('modal-product-id').value = 'TOY-' + String(this.products.length + 1).padStart(3, '0');
     document.getElementById('modal-product-id').readOnly = false;
     document.getElementById('modal-product-name').value = '';
-    document.getElementById('modal-product-category').value = this.categories[0] || 'เครื่องดื่ม';
+    document.getElementById('modal-product-category').value = this.categories[0] || 'Art Toy / กล่องสุ่ม';
     document.getElementById('modal-product-unit').value = 'ชิ้น';
     document.getElementById('modal-product-cost').value = '0';
     document.getElementById('modal-product-sale').value = '0';

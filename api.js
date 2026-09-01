@@ -2,24 +2,105 @@
  * API Service for communicating with Google Apps Script Web App or Local Storage
  */
 
+if (typeof globalThis.CONFIG === 'undefined' && typeof require !== 'undefined') {
+  try {
+    const _cfg = require('./config.js');
+    globalThis.CONFIG = _cfg.CONFIG;
+    if (typeof globalThis.getApiUrl === 'undefined') {
+      globalThis.getApiUrl = _cfg.getApiUrl;
+    }
+  } catch (e) {}
+}
+
+/**
+ * คำนวณต้นทุนเฉลี่ยถ่วงน้ำหนัก (Weighted Average Cost: WAC)
+ * Formula: ((currentStock * oldCost) + (inQty * inCost)) / (currentStock + inQty)
+ */
+function calculateWAC(currentStock, currentCost, inQty, inCost) {
+  const sOld = Math.max(0, Number(currentStock) || 0);
+  const cOld = Number(currentCost) || 0;
+  const qIn = Number(inQty) || 0;
+  const cIn = (inCost !== undefined && inCost !== null && inCost !== '') ? Number(inCost) : 0;
+
+  if (qIn <= 0) return cOld;
+  if (cIn <= 0) return cOld;
+  if (sOld <= 0) return Number(cIn.toFixed(2));
+
+  const newWac = ((sOld * cOld) + (qIn * cIn)) / (sOld + qIn);
+  return Number(newWac.toFixed(2));
+}
+
+/**
+ * ตัดข้อมูลต้นทุนและกำไรออกสำหรับผู้ใช้ระดับ Staff (หรือ non-admin)
+ */
+function redactDataForRole(data, role) {
+  if (!data) return data;
+  const isAdmin = (role && String(role).toLowerCase().trim() === 'admin');
+  if (isAdmin) return data;
+
+  const cloned = JSON.parse(JSON.stringify(data));
+
+  if (cloned.products && Array.isArray(cloned.products)) {
+    cloned.products.forEach(p => {
+      delete p.costPrice;
+      delete p.profitPerUnit;
+      delete p.marginPercent;
+    });
+  }
+
+  if (cloned.transactions && Array.isArray(cloned.transactions)) {
+    cloned.transactions.forEach(t => {
+      delete t.costPrice;
+      delete t.totalCost;
+      delete t.profit;
+    });
+  }
+
+  if (cloned.summary) {
+    delete cloned.summary.totalStockValue;
+    delete cloned.summary.todayCost;
+    delete cloned.summary.todayProfit;
+    delete cloned.summary.todayMargin;
+    delete cloned.summary.totalCost;
+    delete cloned.summary.totalProfit;
+    delete cloned.summary.overallMargin;
+  }
+
+  return cloned;
+}
+
+/**
+ * ดึง Role ของผู้ใช้ปัจจุบัน
+ */
+function getCurrentUserRole() {
+  try {
+    if (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUser) {
+      const user = AuthManager.getCurrentUser();
+      if (user && user.role) return String(user.role).toLowerCase().trim();
+    }
+  } catch (e) {}
+  return 'admin';
+}
+
 const ApiService = {
   /**
    * ดึงข้อมูลทั้งหมดสำหรับแดชบอร์ด
    */
   async getDashboardData() {
+    const role = getCurrentUserRole();
     const apiUrl = getApiUrl();
     if (apiUrl) {
       try {
-        const response = await fetch(`${apiUrl}?action=getDashboardData`);
+        const response = await fetch(`${apiUrl}?action=getDashboardData&role=${encodeURIComponent(role)}`);
         const json = await response.json();
         if (json.success) {
-          localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(json.products || []));
-          localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(json.transactions || []));
-          localStorage.setItem(CONFIG.STORAGE_KEYS.CATEGORIES, JSON.stringify(json.categories || []));
-          if (json.users) {
-            localStorage.setItem('stock_local_users', JSON.stringify(json.users));
+          if (role === 'admin') {
+            if (json.products) localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(json.products));
+            if (json.transactions) localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(json.transactions));
+            if (json.categories) localStorage.setItem(CONFIG.STORAGE_KEYS.CATEGORIES, JSON.stringify(json.categories));
+            if (json.users) localStorage.setItem('stock_local_users', JSON.stringify(json.users));
           }
-          return json;
+          return redactDataForRole(json, role);
         } else {
           throw new Error(json.error || 'Failed to fetch from Google Sheets');
         }
@@ -28,7 +109,7 @@ const ApiService = {
       }
     }
 
-    return this.getLocalDashboardData();
+    return this.getLocalDashboardData(role);
   },
 
   async getProducts() {
@@ -58,6 +139,7 @@ const ApiService = {
    * บันทึก Transaction รับเข้า / เบิกจ่าย / ปรับยอด
    */
   async addTransaction(transactionData) {
+    const role = (transactionData && transactionData.role) ? transactionData.role : getCurrentUserRole();
     const apiUrl = getApiUrl();
     if (apiUrl) {
       try {
@@ -66,6 +148,7 @@ const ApiService = {
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             action: 'addTransaction',
+            role,
             ...transactionData
           })
         });
@@ -81,7 +164,7 @@ const ApiService = {
       }
     }
 
-    return this.addLocalTransaction(transactionData);
+    return this.addLocalTransaction({ role, ...transactionData });
   },
 
   /**
@@ -249,7 +332,9 @@ const ApiService = {
   // LOCAL STORAGE FALLBACK LOGIC
   // =========================================================================
   
-  getLocalDashboardData() {
+  getLocalDashboardData(role) {
+    if (!role) role = getCurrentUserRole();
+
     let products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS));
     let transactions = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.TRANSACTIONS));
     let categories = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.CATEGORIES));
@@ -259,28 +344,30 @@ const ApiService = {
     ];
 
     if (!products) {
-      products = CONFIG.DEFAULT_PRODUCTS;
+      products = JSON.parse(JSON.stringify(CONFIG.DEFAULT_PRODUCTS));
       localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
     }
     if (!transactions) {
-      transactions = CONFIG.DEFAULT_TRANSACTIONS;
+      transactions = JSON.parse(JSON.stringify(CONFIG.DEFAULT_TRANSACTIONS));
       localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
     }
     if (!categories) {
-      categories = CONFIG.DEFAULT_CATEGORIES;
+      categories = JSON.parse(JSON.stringify(CONFIG.DEFAULT_CATEGORIES));
       localStorage.setItem(CONFIG.STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
     }
 
     const summary = this.calculateSummaryMetrics(products, transactions);
 
-    return {
+    const fullData = {
       success: true,
-      products,
-      transactions,
-      categories,
-      users,
-      summary
+      products: JSON.parse(JSON.stringify(products)),
+      transactions: JSON.parse(JSON.stringify(transactions)),
+      categories: JSON.parse(JSON.stringify(categories)),
+      users: JSON.parse(JSON.stringify(users)),
+      summary: summary
     };
+
+    return redactDataForRole(fullData, role);
   },
 
   calculateSummaryMetrics(products, transactions) {
@@ -314,7 +401,7 @@ const ApiService = {
         totalCost += cst;
         totalProfit += prf;
 
-        const tDateStr = new Date(t.timestamp).toDateString();
+        const tDateStr = t.timestamp ? new Date(t.timestamp).toDateString() : '';
         if (tDateStr === todayStr) {
           todayRevenue += rev;
           todayCost += cst;
@@ -324,28 +411,28 @@ const ApiService = {
       }
     });
 
-    const overallMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(2) : 0;
-    const todayMargin = todayRevenue > 0 ? ((todayProfit / todayRevenue) * 100).toFixed(2) : 0;
+    const overallMargin = totalRevenue > 0 ? Number(((totalProfit / totalRevenue) * 100).toFixed(2)) : 0;
+    const todayMargin = todayRevenue > 0 ? Number(((todayProfit / todayRevenue) * 100).toFixed(2)) : 0;
 
     return {
       totalProducts: products.length,
       lowStockCount: lowStockCount,
-      totalStockValue: totalStockValue,
-      todayRevenue: todayRevenue,
-      todayCost: todayCost,
-      todayProfit: todayProfit,
-      todayMargin: Number(todayMargin),
+      totalStockValue: Number(totalStockValue.toFixed(2)),
+      todayRevenue: Number(todayRevenue.toFixed(2)),
+      todayCost: Number(todayCost.toFixed(2)),
+      todayProfit: Number(todayProfit.toFixed(2)),
+      todayMargin: todayMargin,
       todaySalesCount: todaySalesCount,
-      totalRevenue: totalRevenue,
-      totalCost: totalCost,
-      totalProfit: totalProfit,
-      overallMargin: Number(overallMargin)
+      totalRevenue: Number(totalRevenue.toFixed(2)),
+      totalCost: Number(totalCost.toFixed(2)),
+      totalProfit: Number(totalProfit.toFixed(2)),
+      overallMargin: overallMargin
     };
   },
 
   addLocalTransaction(data) {
-    const products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS)) || CONFIG.DEFAULT_PRODUCTS;
-    const transactions = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.TRANSACTIONS)) || CONFIG.DEFAULT_TRANSACTIONS;
+    const products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS)) || JSON.parse(JSON.stringify(CONFIG.DEFAULT_PRODUCTS));
+    const transactions = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.TRANSACTIONS)) || JSON.parse(JSON.stringify(CONFIG.DEFAULT_TRANSACTIONS));
 
     const productId = String(data.productId).trim();
     const type = String(data.type).toUpperCase();
@@ -356,34 +443,56 @@ const ApiService = {
 
     const product = products[productIndex];
     let newStock = Number(product.currentStock) || 0;
-    const costPrice = Number(data.costPrice) > 0 ? Number(data.costPrice) : (product.costPrice || 0);
-    const salePrice = Number(data.salePrice) > 0 ? Number(data.salePrice) : (product.salePrice || 0);
+    const oldCost = Number(product.costPrice) || 0;
+    const isSalePriceProvided = (data.salePrice !== undefined && data.salePrice !== null && data.salePrice !== '' && !isNaN(Number(data.salePrice)) && Number(data.salePrice) >= 0);
+    const salePrice = isSalePriceProvided ? Number(data.salePrice) : (Number(product.salePrice) || 0);
 
+    let costPrice = oldCost;
     let totalCost = 0;
     let totalRevenue = 0;
     let profit = 0;
 
     if (type === 'IN') {
+      const inCost = (data.costPrice !== undefined && data.costPrice !== null && data.costPrice !== '') ? Number(data.costPrice) : 0;
+      const actualInCost = inCost > 0 ? inCost : oldCost;
+      const newWac = calculateWAC(newStock, oldCost, qty, inCost);
+
       newStock += qty;
-      totalCost = qty * costPrice;
-      if (data.costPrice) product.costPrice = costPrice;
+      costPrice = actualInCost;
+      totalCost = qty * actualInCost;
+      totalRevenue = 0;
+      profit = 0;
+
+      product.costPrice = newWac;
+      product.profitPerUnit = Number(((Number(product.salePrice) || 0) - newWac).toFixed(2));
+      product.marginPercent = (Number(product.salePrice) || 0) > 0 ? Number(((product.profitPerUnit / product.salePrice) * 100).toFixed(2)) : 0;
     } else if (type === 'OUT') {
       if (newStock < qty) {
-        throw new Error(`สต็อกคงเหลือไม่พอ! มีอยู่ ${newStock} แต่ต้องการเบิก ${qty}`);
+        throw new Error(`สต็อกคงเหลือไม่พอ! มีอยู่ ${newStock} ${product.unit || 'ชิ้น'} แต่ต้องการเบิก ${qty}`);
       }
       newStock -= qty;
+      costPrice = oldCost;
       totalCost = qty * costPrice;
       totalRevenue = qty * salePrice;
       profit = totalRevenue - totalCost;
     } else if (type === 'ADJUST') {
       newStock = qty;
+      costPrice = oldCost;
+      totalCost = 0;
+      totalRevenue = 0;
+      profit = 0;
+    } else {
+      throw new Error('ประเภทรายการไม่ถูกต้อง (ต้องเป็น IN, OUT, หรือ ADJUST)');
     }
 
     product.currentStock = newStock;
     product.lastUpdated = new Date().toISOString();
     products[productIndex] = product;
 
-    const transId = 'TRX-' + Date.now().toString().slice(-6);
+    const rand4 = Math.floor(1000 + Math.random() * 9000);
+    const transId = 'TRX-' + Date.now() + '-' + rand4;
+    const imageUrl = data.imageUrl || data.imageBase64 || '';
+
     const newTrans = {
       transId: transId,
       timestamp: new Date().toISOString(),
@@ -397,7 +506,8 @@ const ApiService = {
       totalRevenue: totalRevenue,
       profit: profit,
       operator: data.operator || 'Staff',
-      note: data.note || ''
+      note: data.note || '',
+      imageUrl: imageUrl
     };
 
     transactions.unshift(newTrans);
@@ -405,21 +515,32 @@ const ApiService = {
     localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
     localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
 
-    return {
+    const role = (data.role || data.userRole || '').toLowerCase().trim();
+    const isExplicitStaff = (role === 'staff' || (role && role !== 'admin'));
+
+    const result = {
       success: true,
       message: `บันทึกรายการ ${type} สำเร็จ! สต็อกคงเหลือ: ${newStock}`,
       transId: transId,
       newStock: newStock,
-      profit: profit
+      imageUrl: imageUrl
     };
+
+    if (!isExplicitStaff) {
+      result.profit = profit;
+      result.totalCost = totalCost;
+      result.costPrice = costPrice;
+    }
+
+    return result;
   },
 
   saveLocalProduct(data) {
-    const products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS)) || CONFIG.DEFAULT_PRODUCTS;
+    const products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS)) || JSON.parse(JSON.stringify(CONFIG.DEFAULT_PRODUCTS));
     const productId = String(data.productId).trim();
     const cost = Number(data.costPrice) || 0;
     const sale = Number(data.salePrice) || 0;
-    const profit = sale - cost;
+    const profit = Number((sale - cost).toFixed(2));
     const margin = sale > 0 ? Number(((profit / sale) * 100).toFixed(2)) : 0;
 
     const index = products.findIndex(p => p.productId.toLowerCase() === productId.toLowerCase());
@@ -460,9 +581,18 @@ const ApiService = {
   },
 
   deleteLocalProduct(productId) {
-    let products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS)) || CONFIG.DEFAULT_PRODUCTS;
+    let products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS)) || JSON.parse(JSON.stringify(CONFIG.DEFAULT_PRODUCTS));
     products = products.filter(p => p.productId.toLowerCase() !== String(productId).toLowerCase());
     localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
     return { success: true, message: `ลบสินค้า ${productId} เรียบร้อยแล้ว` };
   }
 };
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    ApiService,
+    calculateWAC,
+    redactDataForRole,
+    getCurrentUserRole
+  };
+}

@@ -1,11 +1,10 @@
 {
-  "name": "Stock & Profit Hub",
-  "short_name": "StockHub",
-  "description": "ระบบจัดการสต็อกสินค้า & รายงานกำไร-ขาดทุน เชื่อมต่อ Google Sheets",
-  "start_url": "index.html",
+  "name": "Lebon Toy — ระบบจัดการสต็อก & กำไร",
+  "short_name": "Lebon Toy",
+  "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#312E81",
-  "theme_color": "#4F46E5",
+  "background_color": "#0f172a",
+  "theme_color": "#4338ca",
   "icons": [
     {
       "src": "icons/icon-192.png",

@@ -449,11 +449,16 @@ const ReportsManager = {
         ? `<span class="${t.profit >= 0 ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-semibold'}">฿${(t.profit || 0).toLocaleString()}</span>` 
         : '-';
 
+      const photoBtn = t.imageUrl ? `
+        <button onclick="App.openImageViewerModal('${t.imageUrl}', '${t.productName || t.productId}', '${timeStr}')" 
+          class="ml-1 text-indigo-600 hover:text-indigo-800 text-xs font-semibold" title="ดูรูปถ่าย">📸</button>
+      ` : '';
+
       return `
         <tr class="border-b border-slate-100 hover:bg-slate-50 transition text-sm">
           <td class="px-4 py-2.5 text-slate-500 whitespace-nowrap">${timeStr}</td>
           <td class="px-4 py-2.5">${typeBadge}</td>
-          <td class="px-4 py-2.5 font-medium text-slate-800">${t.productName || t.productId}</td>
+          <td class="px-4 py-2.5 font-medium text-slate-800">${t.productName || t.productId} ${photoBtn}</td>
           <td class="px-4 py-2.5 text-right font-medium text-slate-700">${t.quantity.toLocaleString()}</td>
           <td class="px-4 py-2.5 text-right text-slate-700">${t.totalRevenue ? '฿' + t.totalRevenue.toLocaleString() : '-'}</td>
           <td class="px-4 py-2.5 text-right">${profitDisplay}</td>
@@ -475,25 +480,49 @@ const ReportsManager = {
       return;
     }
 
+    const isAdmin = typeof AuthManager !== 'undefined' && AuthManager.isAdmin && AuthManager.isAdmin();
+
     let csvContent = '\uFEFF'; // UTF-8 BOM
-    csvContent += 'รหัสรายการ,วันเวลา,รหัสสินค้า,ชื่อสินค้า,ประเภท,จำนวน,ต้นทุนต่อหน่วย,ราคาขายต่อหน่วย,ต้นทุนรวม,ยอดขายรวม,กำไร,ผู้ทำรายการ,หมายเหตุ\n';
+    if (isAdmin) {
+      csvContent += 'รหัสรายการ,วันเวลา,รหัสสินค้า,ชื่อสินค้า,ประเภท,จำนวน,ต้นทุนต่อหน่วย,ราคาขายต่อหน่วย,ต้นทุนรวม,ยอดขายรวม,กำไร,ผู้ทำรายการ,หมายเหตุ,ลิงก์รูปหลักฐาน\n';
+    } else {
+      csvContent += 'รหัสรายการ,วันเวลา,รหัสสินค้า,ชื่อสินค้า,ประเภท,จำนวน,ราคาขายต่อหน่วย,ยอดขายรวม,ผู้ทำรายการ,หมายเหตุ,ลิงก์รูปหลักฐาน\n';
+    }
 
     filtered.forEach(t => {
-      const row = [
-        `"${t.transId || ''}"`,
-        `"${new Date(t.timestamp).toLocaleString('th-TH')}"`,
-        `"${t.productId || ''}"`,
-        `"${(t.productName || '').replace(/"/g, '""')}"`,
-        `"${t.type || ''}"`,
-        t.quantity || 0,
-        t.costPrice || 0,
-        t.salePrice || 0,
-        t.totalCost || 0,
-        t.totalRevenue || 0,
-        t.profit || 0,
-        `"${(t.operator || '').replace(/"/g, '""')}"`,
-        `"${(t.note || '').replace(/"/g, '""')}"`
-      ];
+      let row;
+      if (isAdmin) {
+        row = [
+          `"${t.transId || ''}"`,
+          `"${new Date(t.timestamp).toLocaleString('th-TH')}"`,
+          `"${t.productId || ''}"`,
+          `"${(t.productName || '').replace(/"/g, '""')}"`,
+          `"${t.type || ''}"`,
+          t.quantity || 0,
+          t.costPrice || 0,
+          t.salePrice || 0,
+          t.totalCost || 0,
+          t.totalRevenue || 0,
+          t.profit || 0,
+          `"${(t.operator || '').replace(/"/g, '""')}"`,
+          `"${(t.note || '').replace(/"/g, '""')}"`,
+          `"${(t.imageUrl || '').replace(/"/g, '""')}"`
+        ];
+      } else {
+        row = [
+          `"${t.transId || ''}"`,
+          `"${new Date(t.timestamp).toLocaleString('th-TH')}"`,
+          `"${t.productId || ''}"`,
+          `"${(t.productName || '').replace(/"/g, '""')}"`,
+          `"${t.type || ''}"`,
+          t.quantity || 0,
+          t.salePrice || 0,
+          t.totalRevenue || 0,
+          `"${(t.operator || '').replace(/"/g, '""')}"`,
+          `"${(t.note || '').replace(/"/g, '""')}"`,
+          `"${(t.imageUrl || '').replace(/"/g, '""')}"`
+        ];
+      }
       csvContent += row.join(',') + '\n';
     });
 
@@ -507,3 +536,7 @@ const ReportsManager = {
     document.body.removeChild(link);
   }
 };
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { ReportsManager };
+}

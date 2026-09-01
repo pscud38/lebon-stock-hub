@@ -4,6 +4,7 @@
  */
 
 const CONFIG = {
+  SHOP_NAME: 'Lebon Toy',
   DEFAULT_API_URL: 'https://script.google.com/macros/s/AKfycbzz8KQswE5FvwnicE3QhHKbIqO1j-kdVlVIsjAd4WBZG4JBBWNFRsoxhYoSHL6ZwwjhfQ/exec',
 
   STORAGE_KEYS: {
@@ -147,7 +148,8 @@ const CONFIG = {
       totalRevenue: 0,
       profit: 0,
       operator: 'Admin',
-      note: 'รับของล็อตใหม่จากจีน'
+      note: 'รับของล็อตใหม่จากจีน',
+      imageUrl: ''
     },
     {
       transId: 'TRX-2002',
@@ -162,7 +164,8 @@ const CONFIG = {
       totalRevenue: 2940,
       profit: 1260,
       operator: 'Staff A',
-      note: 'ลูกค้ายกบ็อกหน้าร้าน'
+      note: 'ลูกค้ายกบ็อกหน้าร้าน',
+      imageUrl: ''
     },
     {
       transId: 'TRX-2003',
@@ -177,7 +180,8 @@ const CONFIG = {
       totalRevenue: 495,
       profit: 270,
       operator: 'Staff A',
-      note: 'ขายหน้าร้าน'
+      note: 'ขายหน้าร้าน',
+      imageUrl: ''
     },
     {
       transId: 'TRX-2004',
@@ -192,7 +196,8 @@ const CONFIG = {
       totalRevenue: 1300,
       profit: 540,
       operator: 'Staff B',
-      note: 'สั่งออนไลน์ทาง TikTok'
+      note: 'สั่งออนไลน์ทาง TikTok',
+      imageUrl: ''
     },
     {
       transId: 'TRX-2005',
@@ -207,19 +212,34 @@ const CONFIG = {
       totalRevenue: 1393,
       profit: 798,
       operator: 'Staff A',
-      note: 'ขายหน้าร้าน (ขายดีมาก)'
+      note: 'ขายหน้าร้าน (ขายดีมาก)',
+      imageUrl: ''
     }
   ]
 };
 
 function getApiUrl() {
-  return localStorage.getItem(CONFIG.STORAGE_KEYS.API_URL) || CONFIG.DEFAULT_API_URL;
+  if (typeof localStorage !== 'undefined') {
+    return localStorage.getItem(CONFIG.STORAGE_KEYS.API_URL) || CONFIG.DEFAULT_API_URL;
+  }
+  return CONFIG.DEFAULT_API_URL;
 }
 
 function setApiUrl(url) {
-  localStorage.setItem(CONFIG.STORAGE_KEYS.API_URL, url.trim());
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(CONFIG.STORAGE_KEYS.API_URL, url.trim());
+  }
 }
 
 function isOnlineMode() {
   return !!getApiUrl();
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    CONFIG,
+    getApiUrl,
+    setApiUrl,
+    isOnlineMode
+  };
 }
