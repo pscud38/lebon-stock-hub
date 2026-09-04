@@ -135,12 +135,90 @@ const ApiService = {
     ];
   },
 
+  OFFLINE_QUEUE_KEY: 'stock_offline_sync_queue',
+
+  getPendingQueue() {
+    try {
+      return JSON.parse(localStorage.getItem(this.OFFLINE_QUEUE_KEY)) || [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  getPendingQueueCount() {
+    return this.getPendingQueue().length;
+  },
+
+  queueOfflineAction(actionType, payload) {
+    const queue = this.getPendingQueue();
+    queue.push({
+      id: 'QUEUE-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      action: actionType,
+      payload: payload,
+      queuedAt: new Date().toISOString()
+    });
+    localStorage.setItem(this.OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  },
+
+  async syncOfflineQueue() {
+    const queue = this.getPendingQueue();
+    if (queue.length === 0) return { synced: 0, remaining: 0 };
+
+    const apiUrl = getApiUrl();
+    if (!apiUrl) return { synced: 0, remaining: queue.length, error: 'No API URL' };
+
+    let successCount = 0;
+    const remaining = [];
+
+    for (const item of queue) {
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: item.action,
+            ...item.payload
+          })
+        });
+        const json = await response.json();
+        if (json.success) {
+          successCount++;
+        } else {
+          remaining.push(item);
+        }
+      } catch (err) {
+        remaining.push(item);
+      }
+    }
+
+    localStorage.setItem(this.OFFLINE_QUEUE_KEY, JSON.stringify(remaining));
+    return { synced: successCount, remaining: remaining.length };
+  },
+
   /**
-   * บันทึก Transaction รับเข้า / เบิกจ่าย / ปรับยอด
+   * ดึงข้อมูลแคชทันที 0ms (Stale Cache)
+   */
+  getCachedDashboardData() {
+    const role = getCurrentUserRole();
+    return this.getLocalDashboardData(role);
+  },
+
+  /**
+   * บันทึก Transaction รับเข้า / เบิกจ่าย / ปรับยอด (พร้อม Offline Queue)
    */
   async addTransaction(transactionData) {
     const role = (transactionData && transactionData.role) ? transactionData.role : getCurrentUserRole();
     const apiUrl = getApiUrl();
+
+    // หากไม่มีการเชื่อมต่ออินเทอร์เน็ต ให้บันทึกออฟไลน์ทันที
+    if (!navigator.onLine) {
+      this.queueOfflineAction('addTransaction', { role, ...transactionData });
+      const localResult = this.addLocalTransaction({ role, ...transactionData });
+      localResult.isOfflineQueued = true;
+      localResult.message = '📶 บันทึกออฟไลน์แล้ว (จะซิงค์ขึ้นชีตเมื่อต่อเน็ต)';
+      return localResult;
+    }
+
     if (apiUrl) {
       try {
         const response = await fetch(apiUrl, {
@@ -159,12 +237,68 @@ const ApiService = {
           throw new Error(json.error || 'Failed to save transaction');
         }
       } catch (err) {
+        // หากเกิดปัญหาเน็ตหลุดกลางคัน ให้คิวออฟไลน์ไว้
+        if (err.message && (err.message.includes('fetch') || err.message.includes('Network') || !navigator.onLine)) {
+          this.queueOfflineAction('addTransaction', { role, ...transactionData });
+          const localResult = this.addLocalTransaction({ role, ...transactionData });
+          localResult.isOfflineQueued = true;
+          localResult.message = '📶 บันทึกออฟไลน์แล้ว (เน็ตขัดข้อง - จะซิงค์เมื่อต่อเน็ต)';
+          return localResult;
+        }
         console.error('API save failed:', err);
         throw err;
       }
     }
 
     return this.addLocalTransaction({ role, ...transactionData });
+  },
+
+  /**
+   * บันทึก Transaction รับเข้าล็อตใหญ่ (Batch In)
+   */
+  async batchAddTransactions(batchData) {
+    const role = (batchData && batchData.role) ? batchData.role : getCurrentUserRole();
+    const apiUrl = getApiUrl();
+
+    if (!navigator.onLine) {
+      this.queueOfflineAction('batchTransaction', { role, ...batchData });
+      const localResult = this.batchAddLocalTransactions({ role, ...batchData });
+      localResult.isOfflineQueued = true;
+      localResult.message = '📶 บันทึกออฟไลน์แล้ว (จะซิงค์ขึ้นชีตเมื่อต่อเน็ต)';
+      return localResult;
+    }
+
+    if (apiUrl) {
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'batchTransaction',
+            role,
+            ...batchData
+          })
+        });
+        const json = await response.json();
+        if (json.success) {
+          return json;
+        } else {
+          throw new Error(json.error || 'Failed to save batch transaction');
+        }
+      } catch (err) {
+        if (err.message && (err.message.includes('fetch') || err.message.includes('Network') || !navigator.onLine)) {
+          this.queueOfflineAction('batchTransaction', { role, ...batchData });
+          const localResult = this.batchAddLocalTransactions({ role, ...batchData });
+          localResult.isOfflineQueued = true;
+          localResult.message = '📶 บันทึกออฟไลน์แล้ว (เน็ตขัดข้อง - จะซิงค์เมื่อต่อเน็ต)';
+          return localResult;
+        }
+        console.error('Batch API save failed:', err);
+        throw err;
+      }
+    }
+
+    return this.batchAddLocalTransactions({ role, ...batchData });
   },
 
   /**
@@ -436,7 +570,18 @@ const ApiService = {
 
     const productId = String(data.productId).trim();
     const type = String(data.type).toUpperCase();
-    const qty = Number(data.quantity) || 0;
+    const qty = Number(data.quantity);
+
+    if (!productId) throw new Error('กรุณาระบุรหัสสินค้า');
+    if (type === 'ADJUST') {
+      if (isNaN(qty) || qty < 0) {
+        throw new Error('จำนวนสต็อกที่ปรับต้องไม่ติดลบ (ต้องเป็น 0 หรือมากกว่า)');
+      }
+    } else {
+      if (isNaN(qty) || qty <= 0) {
+        throw new Error('จำนวนต้องมากกว่า 0');
+      }
+    }
 
     const productIndex = products.findIndex(p => p.productId.toLowerCase() === productId.toLowerCase());
     if (productIndex === -1) throw new Error('ไม่พบสินค้ารหัส: ' + productId);
@@ -533,6 +678,91 @@ const ApiService = {
     }
 
     return result;
+  },
+
+  batchAddLocalTransactions(data) {
+    const products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS)) || JSON.parse(JSON.stringify(CONFIG.DEFAULT_PRODUCTS));
+    const transactions = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.TRANSACTIONS)) || JSON.parse(JSON.stringify(CONFIG.DEFAULT_TRANSACTIONS));
+
+    const items = data.items || [];
+    const operator = data.operator || 'Staff';
+    const batchNote = data.note || 'รับเข้าล็อตใหญ่ (Batch In)';
+    const now = new Date();
+    const batchId = 'BATCH-' + Date.now() + '-' + Math.floor(1000 + Math.random() * 9000);
+    const imageUrl = data.imageUrl || data.imageBase64 || '';
+    const processed = [];
+
+    items.forEach((item, idx) => {
+      const pId = String(item.productId || '').trim().toLowerCase();
+      const pIdx = products.findIndex(p => p.productId.toLowerCase() === pId);
+      if (pIdx === -1) return;
+
+      const product = products[pIdx];
+      const qty = Number(item.quantity) || 0;
+      if (qty <= 0) return;
+
+      const type = String(item.type || 'IN').toUpperCase();
+      const oldCost = Number(product.costPrice) || 0;
+      const inCost = (item.costPrice !== undefined && item.costPrice !== null && item.costPrice !== '') ? Number(item.costPrice) : oldCost;
+      const itemSalePrice = (item.salePrice !== undefined && item.salePrice !== null && item.salePrice !== '') ? Number(item.salePrice) : (Number(product.salePrice) || 0);
+      const transId = `${batchId}-${idx + 1}`;
+
+      let newStock = Number(product.currentStock) || 0;
+      let costPrice = oldCost;
+      let totalCost = 0;
+      let totalRevenue = 0;
+      let profit = 0;
+
+      if (type === 'IN') {
+        const newWac = calculateWAC(newStock, oldCost, qty, inCost);
+        newStock += qty;
+        costPrice = inCost;
+        totalCost = qty * inCost;
+
+        product.costPrice = newWac;
+        product.profitPerUnit = Number(((Number(product.salePrice) || 0) - newWac).toFixed(2));
+        product.marginPercent = (Number(product.salePrice) || 0) > 0 ? Number(((product.profitPerUnit / product.salePrice) * 100).toFixed(2)) : 0;
+      } else if (type === 'OUT') {
+        newStock = Math.max(0, newStock - qty);
+        totalCost = qty * oldCost;
+        totalRevenue = qty * itemSalePrice;
+        profit = totalRevenue - totalCost;
+      }
+
+      product.currentStock = newStock;
+      product.lastUpdated = now.toISOString();
+      products[pIdx] = product;
+
+      transactions.unshift({
+        transId: transId,
+        timestamp: now.toISOString(),
+        productId: product.productId,
+        productName: product.productName,
+        type: type,
+        quantity: qty,
+        costPrice: costPrice,
+        salePrice: itemSalePrice,
+        totalCost: totalCost,
+        totalRevenue: totalRevenue,
+        profit: profit,
+        operator: operator,
+        note: item.note ? `${batchNote} (${item.note})` : batchNote,
+        imageUrl: imageUrl
+      });
+
+      processed.push({ productId: product.productId, newStock: newStock, qty: qty });
+    });
+
+    localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+
+    return {
+      success: true,
+      message: `บันทึกรายการล็อตใหญ่สำเร็จ ${processed.length} รายการ!`,
+      batchId: batchId,
+      itemCount: processed.length,
+      imageUrl: imageUrl
+    };
   },
 
   saveLocalProduct(data) {

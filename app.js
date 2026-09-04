@@ -13,6 +13,9 @@ const App = {
   selectedCategory: 'ALL',
   searchQuery: '',
   currentAttachedPhotoBase64: null, // เก็บรูปภาพ Base64 ที่ถ่าย/แนบมา
+  deferredPrompt: null, // PWA Install prompt event
+  batchRows: [], // รายการในโมดอลรับเข้าล็อตใหญ่
+  batchReceiptBase64: null, // รูปใบเสร็จบิลรวม
 
   async init() {
     this.bindAuth();
@@ -22,16 +25,47 @@ const App = {
     this.bindPosActions();
     this.bindSettings();
     this.bindSearchAndFilter();
+    this.bindPwaAndSync();
+
+    // ตอบสนองทันที 0 วินาทีด้วย Local Database Cache (Stale-While-Revalidate)
+    this.renderCachedDataFirst();
+    this.updateSyncUI();
     
     // ตรวจสอบการ Login
     if (!AuthManager.checkAuthAndApplyUI()) {
       return;
     }
 
-    // โหลดข้อมูล
+    // โหลดข้อมูลล่าสุดจาก Google Sheets ใน Background
     await this.refreshData();
     ReportsManager.init();
     this.updateConnectionStatus();
+  },
+
+  /**
+   * โหลดและแสดงผลข้อมูลจาก Cache ในเครื่องทันที (0 วินาที)
+   */
+  renderCachedDataFirst() {
+    try {
+      const cached = ApiService.getCachedDashboardData();
+      if (cached && cached.products && cached.products.length > 0) {
+        this.products = cached.products || [];
+        this.transactions = cached.transactions || [];
+        this.categories = cached.categories || [];
+        this.users = cached.users || [];
+        this.summary = cached.summary || {};
+
+        this.renderDashboard();
+        this.renderProducts();
+        this.renderHistory();
+        this.renderUsersTable();
+        this.populateCategoryDropdowns();
+        this.updateMyAccountInfo();
+        AuthManager.checkAuthAndApplyUI();
+      }
+    } catch (e) {
+      console.warn('Cached data render error:', e);
+    }
   },
 
   /**
@@ -783,15 +817,29 @@ const App = {
         const type = posTypeSelect.value;
         const labelEl = document.getElementById('pos-unit-price-label');
         const priceInput = document.getElementById('pos-unit-price-input');
+        const priceContainer = document.getElementById('pos-unit-price-container');
+        const qtyLabel = document.getElementById('pos-qty-label');
+        const qtyInput = document.getElementById('pos-qty-input');
 
         if (type === 'OUT') {
+          if (qtyLabel) qtyLabel.textContent = 'จำนวนขาย';
+          if (qtyInput) qtyInput.min = '1';
+          if (priceContainer) priceContainer.classList.remove('hidden');
           if (labelEl) labelEl.innerHTML = '<span>ราคาขายจริง/ชิ้น (฿)</span> <span class="text-[10px] text-indigo-600 font-normal">แก้ไขได้</span>';
           if (priceInput && product) priceInput.value = product.salePrice || 0;
         } else if (type === 'IN') {
+          if (qtyLabel) qtyLabel.textContent = 'จำนวนรับเข้า';
+          if (qtyInput) qtyInput.min = '1';
+          if (priceContainer) priceContainer.classList.remove('hidden');
           if (labelEl) labelEl.innerHTML = '<span>ต้นทุนรับเข้า/ชิ้น (฿)</span> <span class="text-[10px] text-emerald-600 font-normal">แก้ไขได้</span>';
           if (priceInput && product) priceInput.value = product.costPrice || 0;
-        } else {
-          if (labelEl) labelEl.innerHTML = '<span>ยอดสต็อกเป้าหมาย</span>';
+        } else if (type === 'ADJUST') {
+          if (qtyLabel) qtyLabel.textContent = 'สต็อกจริงหลังปรับ (ชิ้น)';
+          if (qtyInput) {
+            qtyInput.min = '0';
+            if (product) qtyInput.value = product.currentStock;
+          }
+          if (priceContainer) priceContainer.classList.add('hidden');
         }
         this.calculatePosLiveProfit();
       });
@@ -799,6 +847,42 @@ const App = {
 
     ['pos-qty-input', 'pos-unit-price-input'].forEach(id => {
       document.getElementById(id)?.addEventListener('input', () => this.calculatePosLiveProfit());
+    });
+
+    // ปุ่มเลือกเหตุผลการตัดสต็อกด่วน (ตัวโชว์, ชำรุด/กล่องบุบ, ของแถม, ขายหน้าร้าน, ออนไลน์)
+    document.querySelectorAll('.pos-reason-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const reason = pill.dataset.reason;
+        const isZeroPrice = pill.dataset.zeroPrice === 'true';
+
+        const noteInput = document.getElementById('pos-note-input');
+        if (noteInput) noteInput.value = reason;
+
+        // ไฮไลต์ปุ่มที่เลือก
+        document.querySelectorAll('.pos-reason-pill').forEach(p => {
+          p.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-100', 'text-indigo-800', 'font-bold');
+        });
+        pill.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-100', 'text-indigo-800', 'font-bold');
+
+        const priceInput = document.getElementById('pos-unit-price-input');
+        const typeSelect = document.getElementById('pos-type-select');
+        const prodId = document.getElementById('pos-product-select')?.value;
+        const prod = this.products.find(p => p.productId === prodId);
+
+        if (isZeroPrice) {
+          if (typeSelect && typeSelect.value !== 'OUT') {
+            typeSelect.value = 'OUT';
+            typeSelect.dispatchEvent(new Event('change'));
+          }
+          if (priceInput) priceInput.value = '0';
+          this.showToast(`ตัดสต็อก: "${reason}" (ราคา ฿0 ตัดสต็อกเป็นต้นทุน/ค่าใช้จ่ายร้าน)`, 'info');
+        } else {
+          if (priceInput && prod && (priceInput.value === '0' || !priceInput.value)) {
+            priceInput.value = prod.salePrice || 0;
+          }
+        }
+        this.calculatePosLiveProfit();
+      });
     });
 
     document.getElementById('pos-submit-btn')?.addEventListener('click', () => this.submitPosTransaction());
@@ -836,14 +920,29 @@ const App = {
     const type = document.getElementById('pos-type-select')?.value || 'OUT';
     const priceInput = document.getElementById('pos-unit-price-input');
     const labelEl = document.getElementById('pos-unit-price-label');
+    const priceContainer = document.getElementById('pos-unit-price-container');
+    const qtyLabel = document.getElementById('pos-qty-label');
+    const qtyInput = document.getElementById('pos-qty-input');
 
-    if (priceInput) {
-      priceInput.value = type === 'OUT' ? product.salePrice : product.costPrice;
-    }
-    if (labelEl) {
-      labelEl.innerHTML = type === 'OUT' 
-        ? '<span>ราคาขายจริง/ชิ้น (฿)</span> <span class="text-[10px] text-indigo-600 font-normal">แก้ไขได้</span>'
-        : '<span>ต้นทุนรับเข้า/ชิ้น (฿)</span> <span class="text-[10px] text-emerald-600 font-normal">แก้ไขได้</span>';
+    if (type === 'OUT') {
+      if (qtyLabel) qtyLabel.textContent = 'จำนวนขาย';
+      if (qtyInput) qtyInput.min = '1';
+      if (priceContainer) priceContainer.classList.remove('hidden');
+      if (priceInput) priceInput.value = product.salePrice || 0;
+      if (labelEl) labelEl.innerHTML = '<span>ราคาขายจริง/ชิ้น (฿)</span> <span class="text-[10px] text-indigo-600 font-normal">แก้ไขได้</span>';
+    } else if (type === 'IN') {
+      if (qtyLabel) qtyLabel.textContent = 'จำนวนรับเข้า';
+      if (qtyInput) qtyInput.min = '1';
+      if (priceContainer) priceContainer.classList.remove('hidden');
+      if (priceInput) priceInput.value = product.costPrice || 0;
+      if (labelEl) labelEl.innerHTML = '<span>ต้นทุนรับเข้า/ชิ้น (฿)</span> <span class="text-[10px] text-emerald-600 font-normal">แก้ไขได้</span>';
+    } else if (type === 'ADJUST') {
+      if (qtyLabel) qtyLabel.textContent = 'สต็อกจริงหลังปรับ (ชิ้น)';
+      if (qtyInput) {
+        qtyInput.min = '0';
+        qtyInput.value = product.currentStock;
+      }
+      if (priceContainer) priceContainer.classList.add('hidden');
     }
 
     this.calculatePosLiveProfit();
@@ -897,9 +996,16 @@ const App = {
       this.showToast('กรุณาเลือกสินค้า', 'warning');
       return;
     }
-    if (qty <= 0) {
-      this.showToast('กรุณาระบุจำนวนที่มากกว่า 0', 'warning');
-      return;
+    if (type === 'ADJUST') {
+      if (isNaN(qty) || qty < 0) {
+        this.showToast('กรุณาระบุจำนวนสต็อกที่ปรับเป็น 0 หรือมากกว่า', 'warning');
+        return;
+      }
+    } else {
+      if (isNaN(qty) || qty <= 0) {
+        this.showToast('กรุณาระบุจำนวนที่มากกว่า 0', 'warning');
+        return;
+      }
     }
 
     const product = this.products.find(p => p.productId === productId);
@@ -927,8 +1033,12 @@ const App = {
       document.getElementById('pos-photo-input').value = '';
       document.getElementById('pos-photo-preview-container')?.classList.add('hidden');
       document.getElementById('btn-remove-photo')?.classList.add('hidden');
+      document.querySelectorAll('.pos-reason-pill').forEach(p => {
+        p.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-100', 'text-indigo-800', 'font-bold');
+      });
 
       await this.refreshData();
+      this.updateSyncUI();
       this.updatePosProductInfo(productId);
     } catch (err) {
       this.showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
@@ -1016,6 +1126,10 @@ const App = {
       return;
     }
 
+    const isEdit = document.getElementById('modal-product-id').readOnly;
+    const existingProduct = isEdit ? this.products.find(p => p.productId.toLowerCase() === productId.toLowerCase()) : null;
+    const isStockChanged = existingProduct && existingProduct.currentStock !== initialStock;
+
     try {
       this.showLoading(true);
       const res = await ApiService.saveProduct({
@@ -1027,7 +1141,7 @@ const App = {
         salePrice,
         initialStock,
         minAlert,
-        updateStock: false
+        updateStock: !isEdit || isStockChanged
       });
 
       this.showToast(res.message || 'บันทึกสินค้าสำเร็จ!', 'success');
@@ -1058,13 +1172,12 @@ const App = {
     this.switchTab('pos');
     const select = document.getElementById('pos-product-select');
     const typeSelect = document.getElementById('pos-type-select');
+    if (typeSelect && type) {
+      typeSelect.value = type;
+    }
     if (select) {
       select.value = productId;
       this.updatePosProductInfo(productId);
-    }
-    if (typeSelect) {
-      typeSelect.value = type;
-      this.calculatePosLiveProfit();
     }
   },
 
@@ -1111,6 +1224,321 @@ const App = {
         this.showLoading(false);
       }
     });
+  },
+
+  // =========================================================================
+  // PWA 2.0 & BACKGROUND SYNC (OFFLINE RESILIENCE)
+  // =========================================================================
+
+  bindPwaAndSync() {
+    const btnInstall = document.getElementById('btn-install-pwa');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      this.deferredPrompt = e;
+      if (btnInstall) btnInstall.classList.remove('hidden');
+    });
+
+    if (btnInstall) {
+      btnInstall.addEventListener('click', async () => {
+        if (this.deferredPrompt) {
+          this.deferredPrompt.prompt();
+          const { outcome } = await this.deferredPrompt.userChoice;
+          if (outcome === 'accepted') {
+            this.showToast('ขอบคุณที่ติดตั้งแอป Lebon Toy!', 'success');
+          }
+          this.deferredPrompt = null;
+          btnInstall.classList.add('hidden');
+        } else {
+          this.showToast('สามารถติดตั้งแอปได้โดยเลือก "เพิ่มไปยังหน้าจอโฮม" ในเมนูของเบราว์เซอร์', 'info');
+        }
+      });
+    }
+
+    window.addEventListener('appinstalled', () => {
+      this.showToast('ติดตั้งแอปพลิเคชัน Lebon Toy เรียบร้อยแล้ว!', 'success');
+      if (btnInstall) btnInstall.classList.add('hidden');
+      this.deferredPrompt = null;
+    });
+
+    // ตรวจจับสถานะการเชื่อมต่ออินเทอร์เน็ต
+    window.addEventListener('online', () => {
+      this.showToast('🟢 เชื่อมต่ออินเทอร์เน็ตแล้ว ระบบกำลังซิงค์ข้อมูล...', 'success');
+      this.updateSyncUI();
+      this.syncOfflineData();
+    });
+
+    window.addEventListener('offline', () => {
+      this.showToast('🔴 การเชื่อมต่อหลุด (ทำงานแบบออฟไลน์ บันทึกข้อมูลในเครื่องอัตโนมัติ)', 'warning');
+      this.updateSyncUI();
+    });
+  },
+
+  updateSyncUI() {
+    const queue = ApiService.getPendingQueue();
+    const count = queue.length;
+    const btnSync = document.getElementById('btn-sync-now');
+    const syncCountEl = document.getElementById('sync-count');
+    const badge = document.getElementById('connection-status-badge');
+
+    if (syncCountEl) syncCountEl.textContent = count;
+    if (btnSync) {
+      if (count > 0) {
+        btnSync.classList.remove('hidden');
+      } else {
+        btnSync.classList.add('hidden');
+      }
+    }
+
+    if (badge) {
+      if (!navigator.onLine) {
+        badge.innerHTML = '🔴 ออฟไลน์ (บันทึกลงเครื่อง)';
+        badge.className = 'hidden sm:inline-block px-3 py-1 bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-full text-xs font-medium';
+      } else if (count > 0) {
+        badge.innerHTML = `🟡 รอซิงค์ (${count})`;
+        badge.className = 'hidden sm:inline-block px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full text-xs font-medium cursor-pointer';
+      } else if (isOnlineMode()) {
+        badge.innerHTML = '🟢 เชื่อมต่อ Google Sheets แล้ว';
+        badge.className = 'hidden sm:inline-block px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-medium';
+      } else {
+        badge.innerHTML = '🟡 โหมดทดลอง (Demo)';
+        badge.className = 'hidden sm:inline-block px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full text-xs font-medium';
+      }
+    }
+  },
+
+  async syncOfflineData() {
+    if (!navigator.onLine) {
+      this.showToast('ขณะนี้ยังออฟไลน์อยู่ ไม่สามารถซิงค์ขึ้นชีตได้', 'warning');
+      return;
+    }
+
+    const btnSync = document.getElementById('btn-sync-now');
+    const prevHtml = btnSync ? btnSync.innerHTML : '';
+    if (btnSync) {
+      btnSync.innerHTML = '<span class="animate-spin text-sm">🔄</span> กำลังซิงค์...';
+    }
+
+    try {
+      const res = await ApiService.syncOfflineQueue();
+      if (res.synced > 0) {
+        this.showToast(`ซิงค์ข้อมูลขึ้น Google Sheets สำเร็จ ${res.synced} รายการ!`, 'success');
+        await this.refreshData();
+      } else if (res.remaining === 0) {
+        this.showToast('ไม่มีรายการค้างซิงค์ ข้อมูลล่าสุดสมบูรณ์แล้ว', 'info');
+      } else if (res.error) {
+        this.showToast('การซิงค์มีข้อขัดข้อง: ' + res.error, 'warning');
+      }
+    } catch (err) {
+      this.showToast('เกิดข้อผิดพลาดในการซิงค์: ' + err.message, 'error');
+    } finally {
+      if (btnSync) btnSync.innerHTML = prevHtml;
+      this.updateSyncUI();
+    }
+  },
+
+  // =========================================================================
+  // BATCH STOCK IN (รับเข้าล็อตใหญ่ในบิลเดียว)
+  // =========================================================================
+
+  openBatchInModal() {
+    const noteEl = document.getElementById('batch-invoice-note');
+    if (noteEl) noteEl.value = '';
+    this.clearBatchReceipt();
+
+    // เริ่มต้นให้มี 3 แถวเพื่อความสะดวกในการกรอก
+    this.batchRows = [
+      { productId: '', qty: 1, costPrice: 0 },
+      { productId: '', qty: 1, costPrice: 0 },
+      { productId: '', qty: 1, costPrice: 0 }
+    ];
+    this.renderBatchRows();
+    document.getElementById('batch-in-modal')?.classList.remove('hidden');
+  },
+
+  closeBatchInModal() {
+    document.getElementById('batch-in-modal')?.classList.add('hidden');
+  },
+
+  addBatchRow() {
+    this.batchRows.push({ productId: '', qty: 1, costPrice: 0 });
+    this.renderBatchRows();
+  },
+
+  removeBatchRow(index) {
+    if (this.batchRows.length <= 1) {
+      this.batchRows = [{ productId: '', qty: 1, costPrice: 0 }];
+    } else {
+      this.batchRows.splice(index, 1);
+    }
+    this.renderBatchRows();
+  },
+
+  updateBatchRow(index, field, value) {
+    if (!this.batchRows[index]) return;
+    if (field === 'productId') {
+      this.batchRows[index].productId = value;
+      const product = this.products.find(p => p.productId === value);
+      if (product) {
+        this.batchRows[index].costPrice = product.costPrice || 0;
+        const costInput = document.getElementById(`batch-cost-${index}`);
+        if (costInput) costInput.value = product.costPrice || 0;
+      }
+    } else if (field === 'qty') {
+      this.batchRows[index].qty = Math.max(1, Number(value) || 1);
+    } else if (field === 'costPrice') {
+      this.batchRows[index].costPrice = Math.max(0, Number(value) || 0);
+    }
+
+    const row = this.batchRows[index];
+    const subtotal = (row.qty || 0) * (row.costPrice || 0);
+    const subtotalEl = document.getElementById(`batch-subtotal-${index}`);
+    if (subtotalEl) {
+      subtotalEl.textContent = `฿${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    this.updateBatchSummary();
+  },
+
+  renderBatchRows() {
+    const container = document.getElementById('batch-items-list');
+    if (!container) return;
+
+    container.innerHTML = this.batchRows.map((row, idx) => {
+      const subtotal = (row.qty || 0) * (row.costPrice || 0);
+      return `
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 p-2.5 bg-slate-50 hover:bg-indigo-50/30 rounded-xl border border-slate-200/80 items-center text-xs transition">
+          <div class="col-span-12 sm:col-span-5">
+            <label class="block sm:hidden text-[10px] font-bold text-slate-500 mb-0.5">สินค้า:</label>
+            <select id="batch-product-${idx}" onchange="App.updateBatchRow(${idx}, 'productId', this.value)"
+              class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <option value="">-- เลือกสินค้า --</option>
+              ${this.products.map(p => `
+                <option value="${p.productId}" ${p.productId === row.productId ? 'selected' : ''}>
+                  ${p.productId} — ${p.productName} (สต็อก: ${p.currentStock})
+                </option>
+              `).join('')}
+            </select>
+          </div>
+
+          <div class="col-span-6 sm:col-span-2">
+            <label class="block sm:hidden text-[10px] font-bold text-slate-500 mb-0.5">จำนวนรับ:</label>
+            <input type="number" min="1" value="${row.qty}" id="batch-qty-${idx}"
+              oninput="App.updateBatchRow(${idx}, 'qty', this.value)"
+              placeholder="จำนวน"
+              class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 text-right focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+
+          <div class="col-span-6 sm:col-span-2">
+            <label class="block sm:hidden text-[10px] font-bold text-slate-500 mb-0.5">ต้นทุนใหม่ (฿):</label>
+            <input type="number" min="0" step="0.01" value="${row.costPrice}" id="batch-cost-${idx}"
+              oninput="App.updateBatchRow(${idx}, 'costPrice', this.value)"
+              placeholder="ต้นทุน/ชิ้น"
+              class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 text-right focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+
+          <div class="col-span-10 sm:col-span-2 text-right font-bold text-slate-700 py-1">
+            <span class="inline sm:hidden text-[10px] text-slate-400 font-normal">รวม: </span>
+            <span id="batch-subtotal-${idx}" class="text-indigo-600">฿${subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+
+          <div class="col-span-2 sm:col-span-1 text-center">
+            <button type="button" onclick="App.removeBatchRow(${idx})" title="ลบรายการนี้"
+              class="w-8 h-8 rounded-lg text-rose-500 hover:text-white hover:bg-rose-500 transition flex items-center justify-center font-bold text-sm mx-auto">
+              🗑️
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    this.updateBatchSummary();
+  },
+
+  updateBatchSummary() {
+    const validRows = this.batchRows.filter(r => r.productId && r.qty > 0);
+    const totalItems = validRows.length;
+    const totalQty = validRows.reduce((sum, r) => sum + (Number(r.qty) || 0), 0);
+    const totalCost = validRows.reduce((sum, r) => sum + ((Number(r.qty) || 0) * (Number(r.costPrice) || 0)), 0);
+
+    const itemsEl = document.getElementById('batch-summary-items');
+    const qtyEl = document.getElementById('batch-summary-qty');
+    const costEl = document.getElementById('batch-summary-cost');
+
+    if (itemsEl) itemsEl.textContent = totalItems.toString();
+    if (qtyEl) qtyEl.textContent = totalQty.toLocaleString();
+    if (costEl) costEl.textContent = `฿${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  },
+
+  async handleBatchReceiptSelect(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    try {
+      this.showLoading(true);
+      const base64 = await this.compressImage(file);
+      this.batchReceiptBase64 = base64;
+      const previewEl = document.getElementById('batch-receipt-preview');
+      const wrapEl = document.getElementById('batch-receipt-preview-wrap');
+      const labelEl = document.getElementById('batch-receipt-btn-label');
+
+      if (previewEl) previewEl.src = base64;
+      if (wrapEl) wrapEl.classList.remove('hidden');
+      if (labelEl) labelEl.textContent = 'เปลี่ยนรูปใบเสร็จ';
+      this.showToast('แนบรูปถ่ายใบเสร็จบิลรวมเรียบร้อย', 'success');
+    } catch (err) {
+      this.showToast('ไม่สามารถประมวลผลรูปภาพได้: ' + err.message, 'error');
+    } finally {
+      this.showLoading(false);
+    }
+  },
+
+  clearBatchReceipt() {
+    this.batchReceiptBase64 = null;
+    const fileInput = document.getElementById('batch-receipt-input');
+    const wrapEl = document.getElementById('batch-receipt-preview-wrap');
+    const labelEl = document.getElementById('batch-receipt-btn-label');
+    if (fileInput) fileInput.value = '';
+    if (wrapEl) wrapEl.classList.add('hidden');
+    if (labelEl) labelEl.textContent = 'เลือกรูปถ่ายใบเสร็จ';
+  },
+
+  async submitBatchInTransaction() {
+    const validRows = this.batchRows.filter(r => r.productId && Number(r.qty) > 0);
+    if (validRows.length === 0) {
+      this.showToast('กรุณาเลือกสินค้าและระบุจำนวนอย่างน้อย 1 รายการ', 'warning');
+      return;
+    }
+
+    const note = document.getElementById('batch-invoice-note')?.value || '';
+    const user = AuthManager.getCurrentUser();
+    const operator = (user ? user.fullName || user.username : 'Admin');
+    const role = (user && user.role) ? user.role : 'admin';
+
+    const items = validRows.map(r => ({
+      productId: r.productId,
+      quantity: Number(r.qty),
+      costPrice: Number(r.costPrice) || 0
+    }));
+
+    try {
+      this.showLoading(true);
+      const res = await ApiService.batchAddTransactions({
+        items: items,
+        invoiceNote: note,
+        imageBase64: this.batchReceiptBase64,
+        operator: operator,
+        role: role
+      });
+
+      this.showToast(res.message || `บันทึกรับเข้าสำเร็จ ${items.length} รายการ!`, 'success');
+      this.closeBatchInModal();
+      this.updateSyncUI();
+      await this.refreshData();
+    } catch (err) {
+      this.showToast('เกิดข้อผิดพลาดในการรับเข้าล็อตใหญ่: ' + err.message, 'error');
+    } finally {
+      this.showLoading(false);
+    }
   },
 
   updateConnectionStatus() {

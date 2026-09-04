@@ -21,6 +21,15 @@
   background: #94A3B8;
 }
 
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* QR Scanner Box Overlay */
 #pos-qr-reader {
   border: none !important;

@@ -1,20 +1,38 @@
 {
   "name": "Lebon Toy — ระบบจัดการสต็อก & กำไร",
   "short_name": "Lebon Toy",
+  "description": "ระบบจัดการสต็อกสินค้าและวิเคราะห์กำไร ร้าน Lebon Toy สำหรับ Art Toy, Squishy และสินค้าสำเพ็ง",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#4338ca",
+  "categories": ["business", "productivity", "shopping"],
   "icons": [
     {
       "src": "icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "ขาย / เบิกออก (POS)",
+      "url": "./index.html#pos",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "รับเข้าล็อตใหญ่ (Batch In)",
+      "url": "./index.html#batch",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
