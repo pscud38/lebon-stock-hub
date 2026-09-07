@@ -47,18 +47,20 @@
   <!-- ========================================================================= -->
   <!-- TOP NAVIGATION HEADER -->
   <!-- ========================================================================= -->
-  <header class="bg-indigo-900 text-white sticky top-0 z-30 shadow-md">
+  <header class="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 text-white sticky top-0 z-30 shadow-md border-b border-indigo-800/40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         
         <!-- Logo & Title -->
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-xl shadow-inner font-bold">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-xl shadow-md shadow-indigo-950/50 font-bold ring-2 ring-indigo-400/30">
             🧸
           </div>
           <div>
-            <h1 class="text-base sm:text-lg font-bold tracking-tight">Lebon Toy Stock Hub</h1>
-            <p class="text-[11px] text-indigo-200">ระบบสต็อก & วิเคราะห์กำไร ร้าน Lebon Toy (Art Toy, Squishy & สำเพ็ง)</p>
+            <h1 class="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
+              <span>Lebon Toy Stock Hub</span>
+            </h1>
+            <p class="text-[11px] text-indigo-200/80">ระบบสต็อก & วิเคราะห์กำไร ร้าน Lebon Toy (Art Toy, Squishy & สำเพ็ง)</p>
           </div>
         </div>
 
@@ -80,7 +82,7 @@
           </div>
 
           <!-- User Profile & Logout -->
-          <div id="header-user-profile" class="flex items-center gap-2 bg-indigo-950/70 border border-indigo-700/50 py-1.5 px-3 rounded-xl text-xs">
+          <div id="header-user-profile" class="flex items-center gap-2 bg-indigo-950/80 border border-indigo-700/50 py-1.5 px-3 rounded-xl text-xs shadow-inner">
             <div class="text-right">
               <div id="header-user-name" class="font-bold text-white leading-tight">Admin</div>
               <div id="header-user-role" class="text-[10px] text-indigo-300">🛡️ ผู้ดูแลระบบ</div>
@@ -90,7 +92,7 @@
             </button>
           </div>
 
-          <button onclick="App.refreshData()" title="รีเฟรชข้อมูล" class="p-2 text-indigo-200 hover:text-white hover:bg-indigo-800 rounded-lg transition">
+          <button onclick="App.refreshData()" title="รีเฟรชข้อมูล" class="p-2 text-indigo-200 hover:text-white hover:bg-white/10 rounded-xl transition">
             🔄
           </button>
         </div>
@@ -125,7 +127,7 @@
   <!-- ========================================================================= -->
   <!-- MAIN CONTENT AREA -->
   <!-- ========================================================================= -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 pb-24 sm:pb-8">
 
     <!-- --------------------------------------------------------------------- -->
     <!-- 1. DASHBOARD PAGE -->
@@ -148,41 +150,43 @@
       </div>
 
       <!-- KPI Stats Grid -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-          <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <span>ยอดขายวันนี้</span>
-            <span class="text-blue-500 text-base">💳</span>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        <div class="kpi-card kpi-accent-blue card-hover bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-slate-500 text-xs font-bold uppercase tracking-wider">ยอดขายวันนี้</span>
+            <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm shadow-xs font-bold">💳</div>
           </div>
-          <div id="dash-today-revenue" class="text-2xl font-bold text-slate-800">฿0</div>
-          <div class="text-xs text-slate-400 mt-1">จากรายการเบิกขายวันนี้</div>
+          <div id="dash-today-revenue" class="text-xl sm:text-2xl font-extrabold text-slate-800">฿0</div>
+          <div class="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+            <span>⚡</span> <span>จากรายการขายวันนี้</span>
+          </div>
         </div>
 
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 admin-only">
-          <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <span>กำไรสุทธิวันนี้</span>
-            <span class="text-emerald-500 text-base">💰</span>
+        <div class="kpi-card kpi-accent-emerald card-hover bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 admin-only">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-slate-500 text-xs font-bold uppercase tracking-wider">กำไรสุทธิวันนี้</span>
+            <div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm shadow-xs font-bold">💰</div>
           </div>
-          <div id="dash-today-profit" class="text-2xl font-bold text-emerald-600">+฿0</div>
-          <div class="text-xs text-slate-400 mt-1">Margin: <span id="dash-today-margin" class="font-semibold text-emerald-600">0%</span></div>
+          <div id="dash-today-profit" class="text-xl sm:text-2xl font-extrabold text-emerald-600">+฿0</div>
+          <div class="text-[11px] text-slate-400 mt-1">Margin: <span id="dash-today-margin" class="font-bold text-emerald-600">0%</span></div>
         </div>
 
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 admin-only">
-          <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <span>มูลค่าสต็อกในคลัง</span>
-            <span class="text-indigo-500 text-base">🏢</span>
+        <div class="kpi-card kpi-accent-indigo card-hover bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 admin-only">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-slate-500 text-xs font-bold uppercase tracking-wider">มูลค่าสต็อกในคลัง</span>
+            <div class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-sm shadow-xs font-bold">🏢</div>
           </div>
-          <div id="dash-stock-value" class="text-2xl font-bold text-slate-800">฿0</div>
-          <div class="text-xs text-slate-400 mt-1"><span id="dash-total-products">0</span> รายการสินค้า</div>
+          <div id="dash-stock-value" class="text-xl sm:text-2xl font-extrabold text-slate-800">฿0</div>
+          <div class="text-[11px] text-slate-400 mt-1"><span id="dash-total-products" class="font-bold text-slate-600">0</span> รายการสินค้า</div>
         </div>
 
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-          <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <span>สินค้าใกล้หมด</span>
-            <span class="text-rose-500 text-base">⚠️</span>
+        <div class="kpi-card kpi-accent-rose card-hover bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-slate-500 text-xs font-bold uppercase tracking-wider">สินค้าใกล้หมด</span>
+            <div class="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-sm shadow-xs font-bold">⚠️</div>
           </div>
-          <div id="dash-low-stock" class="text-2xl font-bold text-rose-600">0</div>
-          <div class="text-xs text-slate-400 mt-1">รายการที่ต้องสั่งเพิ่ม</div>
+          <div id="dash-low-stock" class="text-xl sm:text-2xl font-extrabold text-rose-600">0</div>
+          <div class="text-[11px] text-slate-400 mt-1">รายการที่ต้องสั่งเพิ่ม</div>
         </div>
       </div>
 
@@ -399,30 +403,41 @@
               </div>
 
               <div>
-                <label id="pos-qty-label" class="block text-xs font-semibold text-slate-600 mb-1">จำนวน</label>
-                <input type="number" id="pos-qty-input" value="1" min="1"
-                  class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold text-center focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <label id="pos-qty-label" class="block text-xs font-semibold text-slate-600 mb-1">จำนวน (ชิ้น)</label>
+                <div class="flex items-center gap-1.5">
+                  <button type="button" onclick="App.adjustPosQty(-1)" class="pos-stepper-btn w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl border border-slate-200 text-base" title="ลด 1">−</button>
+                  <input type="number" id="pos-qty-input" value="1" min="1"
+                    class="flex-1 h-10 p-2 border border-slate-200 rounded-xl text-base font-extrabold text-center text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                  <button type="button" onclick="App.adjustPosQty(1)" class="pos-stepper-btn w-10 h-10 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl border border-indigo-200 text-base" title="เพิ่ม 1">+</button>
+                </div>
+                <div class="flex items-center gap-1 mt-1.5">
+                  <button type="button" onclick="App.setPosQty(1)" class="pos-stepper-btn flex-1 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">1</button>
+                  <button type="button" onclick="App.setPosQty(2)" class="pos-stepper-btn flex-1 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">2</button>
+                  <button type="button" onclick="App.setPosQty(5)" class="pos-stepper-btn flex-1 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">+5</button>
+                  <button type="button" onclick="App.setPosQty(10)" class="pos-stepper-btn flex-1 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">+10</button>
+                  <button type="button" onclick="App.setPosQty(20)" class="pos-stepper-btn flex-1 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">+20</button>
+                </div>
               </div>
 
               <div id="pos-unit-price-container">
                 <label id="pos-unit-price-label" class="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
                   <span>ราคาขายจริง/ชิ้น (฿)</span>
-                  <span class="text-[10px] text-indigo-600 font-normal">แก้ไขได้</span>
+                  <span class="text-[10px] text-indigo-600 font-medium bg-indigo-50 px-1.5 py-0.5 rounded">แก้ไขได้</span>
                 </label>
                 <input type="number" id="pos-unit-price-input" min="0" step="any" placeholder="0.00"
-                  class="w-full p-2.5 border border-indigo-200 bg-indigo-50/20 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                  class="w-full h-10 p-2.5 border border-indigo-200 bg-indigo-50/20 rounded-xl text-base font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
               </div>
             </div>
 
             <!-- Quick Reason Tags for OUT / ADJUST -->
             <div id="pos-reasons-container" class="space-y-1.5 pt-1">
-              <label class="block text-[11px] font-semibold text-slate-500">เหตุผล / ช่องทางการทำรายการด่วน:</label>
-              <div class="flex flex-wrap gap-1.5">
-                <button type="button" class="pos-reason-pill px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 transition" data-reason="ขายหน้าร้าน (ปกติ)" data-zero-price="false">🛒 ขายหน้าร้าน</button>
-                <button type="button" class="pos-reason-pill px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-amber-50 hover:text-amber-700 border border-slate-200 transition" data-reason="แกะเป็นตัวโชว์หน้าร้าน" data-zero-price="true">🎪 ตัวโชว์ (฿0)</button>
-                <button type="button" class="pos-reason-pill px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-rose-50 hover:text-rose-700 border border-slate-200 transition" data-reason="สินค้าชำรุด / กล่องบุบ" data-zero-price="true">💔 ชำรุด/กล่องบุบ (฿0)</button>
-                <button type="button" class="pos-reason-pill px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-purple-50 hover:text-purple-700 border border-slate-200 transition" data-reason="ของแถมโปรโมชั่นลูกค้า" data-zero-price="true">🎁 ของแถม (฿0)</button>
-                <button type="button" class="pos-reason-pill px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-cyan-50 hover:text-cyan-700 border border-slate-200 transition" data-reason="ส่งพัสดุออนไลน์ (TikTok/Shopee)" data-zero-price="false">📦 ออนไลน์</button>
+              <label class="block text-xs font-semibold text-slate-600">เหตุผล / ช่องทางการทำรายการด่วน:</label>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="pos-reason-pill px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 border border-slate-200 transition shadow-2xs" data-reason="ขายหน้าร้าน (ปกติ)" data-zero-price="false">🛒 ขายหน้าร้าน</button>
+                <button type="button" class="pos-reason-pill px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-amber-50 hover:text-amber-700 text-slate-700 border border-slate-200 transition shadow-2xs" data-reason="แกะเป็นตัวโชว์หน้าร้าน" data-zero-price="true">🎪 ตัวโชว์ (฿0)</button>
+                <button type="button" class="pos-reason-pill px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 border border-slate-200 transition shadow-2xs" data-reason="สินค้าชำรุด / กล่องบุบ" data-zero-price="true">💔 ชำรุด/บุบ (฿0)</button>
+                <button type="button" class="pos-reason-pill px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-purple-50 hover:text-purple-700 text-slate-700 border border-slate-200 transition shadow-2xs" data-reason="ของแถมโปรโมชั่นลูกค้า" data-zero-price="true">🎁 ของแถม (฿0)</button>
+                <button type="button" class="pos-reason-pill px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-cyan-50 hover:text-cyan-700 text-slate-700 border border-slate-200 transition shadow-2xs" data-reason="ส่งพัสดุออนไลน์ (TikTok/Shopee)" data-zero-price="false">📦 ออนไลน์</button>
               </div>
             </div>
 
@@ -491,7 +506,7 @@
           </div>
 
           <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-            <button id="pos-submit-btn" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white rounded-xl font-bold shadow-md transition text-base flex items-center justify-center gap-2">
+            <button id="pos-submit-btn" class="w-full py-4 sm:py-4.5 bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl font-extrabold shadow-lg shadow-indigo-200 active:scale-[0.99] transition-all text-base flex items-center justify-center gap-2 btn-submit-glow">
               <span>✅</span> ยืนยันบันทึกรายการ
             </button>
             <p class="text-xs text-center text-slate-400 mt-2">⚡ ข้อมูลจะถูกตัดสต็อกและบันทึกขึ้น Cloud ทันที (0 วินาที)</p>
@@ -822,6 +837,39 @@
     </section>
 
   </main>
+
+  <!-- ========================================================================= -->
+  <!-- MOBILE BOTTOM NAVIGATION BAR (Visible only on mobile screens) -->
+  <!-- ========================================================================= -->
+  <nav class="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200/90 mobile-bottom-nav px-2 py-1.5 flex items-center justify-around">
+    <button data-tab="dashboard" class="mobile-nav-btn flex flex-col items-center justify-center flex-1 py-1 text-slate-500 active-mobile-tab">
+      <span class="text-lg">📊</span>
+      <span class="text-[10px] mt-0.5 font-medium">ภาพรวม</span>
+      <div class="mobile-tab-indicator w-3 h-0.5 bg-indigo-600 rounded-full mt-0.5 transition-all"></div>
+    </button>
+    <button data-tab="products" class="mobile-nav-btn flex flex-col items-center justify-center flex-1 py-1 text-slate-400">
+      <span class="text-lg">📦</span>
+      <span class="text-[10px] mt-0.5 font-medium">สินค้า</span>
+      <div class="mobile-tab-indicator w-3 h-0.5 bg-indigo-600 rounded-full mt-0.5 opacity-0 transition-all"></div>
+    </button>
+    <button data-tab="pos" class="mobile-nav-btn flex flex-col items-center justify-center flex-1 py-1 text-slate-500 relative -top-2">
+      <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center text-xl shadow-md shadow-indigo-300">
+        ⚡
+      </div>
+      <span class="text-[10px] font-bold text-indigo-700 mt-0.5">รับ-เบิก</span>
+      <div class="mobile-tab-indicator w-3 h-0.5 bg-indigo-600 rounded-full mt-0.5 opacity-0 transition-all"></div>
+    </button>
+    <button data-tab="history" class="mobile-nav-btn flex flex-col items-center justify-center flex-1 py-1 text-slate-400">
+      <span class="text-lg">📜</span>
+      <span class="text-[10px] mt-0.5 font-medium">ประวัติ</span>
+      <div class="mobile-tab-indicator w-3 h-0.5 bg-indigo-600 rounded-full mt-0.5 opacity-0 transition-all"></div>
+    </button>
+    <button data-tab="settings" class="mobile-nav-btn flex flex-col items-center justify-center flex-1 py-1 text-slate-400">
+      <span class="text-lg">⚙️</span>
+      <span class="text-[10px] mt-0.5 font-medium">ตั้งค่า</span>
+      <div class="mobile-tab-indicator w-3 h-0.5 bg-indigo-600 rounded-full mt-0.5 opacity-0 transition-all"></div>
+    </button>
+  </nav>
 
   <!-- ========================================================================= -->
   <!-- MODAL: ADD / EDIT USER (ADMIN ONLY) -->

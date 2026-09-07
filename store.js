@@ -188,8 +188,8 @@ function renderStockBadgeHtml(p) {
   }
 
   return isLow 
-    ? `<div><span class="px-2 py-0.5 rounded-md text-xs font-bold bg-rose-100 text-rose-700">${p.currentStock <= 0 ? 'หมดเกลี้ยง (0)' : `ใกล้หมด (${p.currentStock} ${p.unit})`}</span>${alertInfo}</div>`
-    : `<div><span class="px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-100 text-emerald-800">${p.currentStock} ${p.unit}</span>${alertInfo}</div>`;
+    ? `<div><span class="px-2.5 py-1 rounded-xl text-xs font-bold bg-rose-100 text-rose-700 inline-flex items-center gap-1">${p.currentStock <= 0 ? '🔴 หมดเกลี้ยง (0)' : `⚠️ ใกล้หมด (${p.currentStock} ${p.unit})`}</span>${alertInfo}</div>`
+    : `<div><span class="px-2.5 py-1 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 inline-flex items-center gap-1">🟢 ${p.currentStock} ${p.unit}</span>${alertInfo}</div>`;
 }
 
 function patchProductRowDOM(product) {

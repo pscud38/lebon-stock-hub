@@ -130,11 +130,19 @@ const App = {
         this.switchTab(tab);
       });
     });
+
+    document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tab = btn.dataset.tab;
+        this.switchTab(tab);
+      });
+    });
   },
 
   switchTab(tab) {
     this.activeTab = tab;
 
+    // Desktop top navigation
     document.querySelectorAll('.nav-btn').forEach(btn => {
       const isCurrent = btn.dataset.tab === tab;
       if (isCurrent) {
@@ -143,6 +151,21 @@ const App = {
       } else {
         btn.classList.remove('bg-indigo-700', 'text-white', 'font-medium');
         btn.classList.add('text-indigo-100', 'hover:bg-indigo-800');
+      }
+    });
+
+    // Mobile bottom navigation
+    document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+      const isCurrent = btn.dataset.tab === tab;
+      const indicator = btn.querySelector('.mobile-tab-indicator');
+      if (isCurrent) {
+        btn.classList.add('active-mobile-tab', 'text-indigo-600');
+        btn.classList.remove('text-slate-400', 'text-slate-500');
+        if (indicator) indicator.classList.remove('opacity-0');
+      } else {
+        btn.classList.remove('active-mobile-tab', 'text-indigo-600');
+        btn.classList.add('text-slate-400');
+        if (indicator) indicator.classList.add('opacity-0');
       }
     });
 
@@ -345,8 +368,8 @@ const App = {
       const allCats = ['ALL', ...this.categories];
       pillsContainer.innerHTML = allCats.map(c => `
         <button onclick="App.setCategoryFilter('${c}')" data-category="${c}"
-          class="cat-pill-btn px-3 py-1 rounded-full text-xs font-medium transition ${this.selectedCategory === c ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
-          ${c === 'ALL' ? 'ทั้งหมด' : c}
+          class="cat-pill-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${this.selectedCategory === c ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+          ${c === 'ALL' ? '🏷️ ทั้งหมด' : c}
         </button>
       `).join('');
     }
@@ -369,8 +392,8 @@ const App = {
       }
 
       const stockBadge = isLow 
-        ? `<div><span class="px-2 py-0.5 rounded-md text-xs font-bold bg-rose-100 text-rose-700">${p.currentStock <= 0 ? 'หมดเกลี้ยง (0)' : `ใกล้หมด (${p.currentStock} ${p.unit})`}</span>${alertInfo}</div>`
-        : `<div><span class="px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-100 text-emerald-800">${p.currentStock} ${p.unit}</span>${alertInfo}</div>`;
+        ? `<div><span class="px-2.5 py-1 rounded-xl text-xs font-bold bg-rose-100 text-rose-700 inline-flex items-center gap-1">${p.currentStock <= 0 ? '🔴 หมดเกลี้ยง (0)' : `⚠️ ใกล้หมด (${p.currentStock} ${p.unit})`}</span>${alertInfo}</div>`
+        : `<div><span class="px-2.5 py-1 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 inline-flex items-center gap-1">🟢 ${p.currentStock} ${p.unit}</span>${alertInfo}</div>`;
 
       const profit = (p.salePrice || 0) - (p.costPrice || 0);
       const margin = p.salePrice > 0 ? ((profit / p.salePrice) * 100).toFixed(1) : '0.0';
@@ -379,32 +402,32 @@ const App = {
         : `<div class="text-rose-600 font-semibold">-฿${Math.abs(profit).toLocaleString()} <span class="text-xs text-slate-400 font-normal">(${margin}%)</span></div>`;
 
       const adminCols = isAdmin ? `
-        <td class="px-4 py-3 text-right text-slate-600">฿${(p.costPrice || 0).toLocaleString()}</td>
+        <td class="px-4 py-3.5 text-right text-slate-600">฿${(p.costPrice || 0).toLocaleString()}</td>
       ` : '';
 
       const profitCol = isAdmin ? `
-        <td class="px-4 py-3 text-right">${profitBadge}</td>
+        <td class="px-4 py-3.5 text-right">${profitBadge}</td>
       ` : '';
 
       const adminButtons = isAdmin ? `
-        <button onclick="App.openEditProductModal('${p.productId}')" class="px-2 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded text-xs mr-1">✏️</button>
-        <button onclick="App.confirmDeleteProduct('${p.productId}')" class="px-2 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded text-xs">🗑️</button>
+        <button onclick="App.openEditProductModal('${p.productId}')" class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs mr-1 font-semibold transition shadow-2xs" title="แก้ไขสินค้า">✏️</button>
+        <button onclick="App.confirmDeleteProduct('${p.productId}')" class="px-2.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-semibold transition shadow-2xs" title="ลบสินค้า">🗑️</button>
       ` : '';
 
       return `
-        <tr data-product-id="${p.productId}" class="border-b border-slate-100 hover:bg-slate-50 transition text-sm">
-          <td class="px-4 py-3 font-mono text-xs text-slate-600 font-semibold">${p.productId}</td>
-          <td class="px-4 py-3">
-            <div class="font-medium text-slate-800">${p.productName}</div>
-            <span class="inline-block px-2 py-0.5 rounded text-[11px] bg-slate-100 text-slate-600">${p.category}</span>
+        <tr data-product-id="${p.productId}" class="border-b border-slate-100 hover:bg-indigo-50/30 transition text-sm">
+          <td class="px-4 py-3.5 font-mono text-xs text-indigo-900 font-bold bg-slate-50/50 rounded-l-xl">${p.productId}</td>
+          <td class="px-4 py-3.5">
+            <div class="font-bold text-slate-800">${p.productName}</div>
+            <span class="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 mt-0.5">${p.category}</span>
           </td>
           ${adminCols}
-          <td class="px-4 py-3 text-right font-medium text-slate-800">฿${(p.salePrice || 0).toLocaleString()}</td>
-          <td class="px-4 py-3 text-right col-profit">${isAdmin ? profitBadge : ''}</td>
-          <td class="px-4 py-3 text-center col-stock">${stockBadge}</td>
-          <td class="px-4 py-3 text-center whitespace-nowrap">
-            <button onclick="App.openQuickTransModal('${p.productId}', 'OUT')" class="px-2 py-1 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded text-xs mr-1 font-medium">เบิกขาย</button>
-            <button onclick="App.openQuickTransModal('${p.productId}', 'IN')" class="px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded text-xs mr-1 font-medium">รับเข้า</button>
+          <td class="px-4 py-3.5 text-right font-extrabold text-slate-800">฿${(p.salePrice || 0).toLocaleString()}</td>
+          <td class="px-4 py-3.5 text-right col-profit">${isAdmin ? profitBadge : ''}</td>
+          <td class="px-4 py-3.5 text-center col-stock">${stockBadge}</td>
+          <td class="px-4 py-3.5 text-center whitespace-nowrap rounded-r-xl">
+            <button onclick="App.openQuickTransModal('${p.productId}', 'OUT')" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs mr-1 font-bold transition shadow-2xs">📤 เบิกขาย</button>
+            <button onclick="App.openQuickTransModal('${p.productId}', 'IN')" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs mr-1 font-bold transition shadow-2xs">📥 รับเข้า</button>
             ${adminButtons}
           </td>
         </tr>
@@ -968,6 +991,28 @@ const App = {
     });
 
     document.getElementById('pos-submit-btn')?.addEventListener('click', () => this.submitPosTransaction());
+  },
+
+  /**
+   * ปรับจำนวนสินค้าในหน้า POS ด้วยปุ่ม Quick Stepper (+/-)
+   */
+  adjustPosQty(delta) {
+    const qtyInput = document.getElementById('pos-qty-input');
+    if (!qtyInput) return;
+    let val = parseInt(qtyInput.value, 10) || 1;
+    val = Math.max(1, val + delta);
+    qtyInput.value = val;
+    this.calculatePosLiveProfit();
+  },
+
+  /**
+   * กำหนดจำนวนสินค้าในหน้า POS ด้วยปุ่มพรีเซ็ตด่วน (1, 2, 5, 10, 20)
+   */
+  setPosQty(val) {
+    const qtyInput = document.getElementById('pos-qty-input');
+    if (!qtyInput) return;
+    qtyInput.value = Math.max(1, parseInt(val, 10) || 1);
+    this.calculatePosLiveProfit();
   },
 
   selectPosProduct(productId) {

@@ -43,13 +43,122 @@
   padding-top: 10px;
 }
 
-/* Animations */
+/* Animations & Transitions */
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }
 .animate-pulse-subtle {
   animation: pulse-subtle 2s infinite ease-in-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.tab-page:not(.hidden) {
+  animation: fadeInUp 0.2s ease-out;
+}
+
+/* Card Hover & Elevation */
+.card-hover {
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+}
+
+/* KPI Accent Cards */
+.kpi-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  transition: all 0.2s ease;
+}
+.kpi-accent-blue {
+  border-left: 4px solid #3B82F6 !important;
+}
+.kpi-accent-emerald {
+  border-left: 4px solid #10B981 !important;
+}
+.kpi-accent-indigo {
+  border-left: 4px solid #6366F1 !important;
+}
+.kpi-accent-rose {
+  border-left: 4px solid #F43F5E !important;
+}
+
+/* Quick Stepper Buttons for POS */
+.pos-stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  touch-action: manipulation;
+  transition: all 0.12s ease;
+}
+.pos-stepper-btn:active {
+  transform: scale(0.94);
+}
+
+/* Glow Primary Button */
+.btn-submit-glow {
+  box-shadow: 0 4px 18px rgba(79, 70, 229, 0.35);
+  transition: all 0.2s ease;
+}
+.btn-submit-glow:hover {
+  box-shadow: 0 6px 24px rgba(79, 70, 229, 0.48);
+  transform: translateY(-1px);
+}
+.btn-submit-glow:active {
+  transform: scale(0.99);
+}
+
+/* Reason Pills Active State */
+.pos-reason-pill {
+  transition: all 0.15s ease;
+  user-select: none;
+  touch-action: manipulation;
+}
+.pos-reason-pill:active {
+  transform: scale(0.96);
+}
+.pos-reason-pill.active-pill {
+  background-color: #4F46E5 !important;
+  color: #FFFFFF !important;
+  border-color: #4338CA !important;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+}
+
+/* Mobile Bottom Navigation Bar */
+.mobile-bottom-nav {
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+}
+.mobile-nav-btn {
+  touch-action: manipulation;
+  transition: all 0.15s ease;
+}
+.mobile-nav-btn:active {
+  transform: scale(0.92);
+}
+.mobile-nav-btn.active-mobile-tab {
+  color: #4F46E5;
+  font-weight: 700;
+}
+.mobile-nav-btn.active-mobile-tab .mobile-tab-indicator {
+  transform: scaleX(1);
+}
+
+/* Table Enhancements */
+.lebon-table th {
+  letter-spacing: 0.04em;
 }
 
 /* Print Stylesheet for Reports */
@@ -59,7 +168,7 @@
     color: black !important;
   }
   
-  header, nav, #toast-container, .no-print, button, .nav-btn {
+  header, nav, #toast-container, .no-print, button, .nav-btn, .mobile-bottom-nav {
     display: none !important;
   }
 
