@@ -2,11 +2,28 @@
  * Periodic Reporting & Analytics Module (Daily / Weekly / Monthly / Custom)
  */
 
+function formatLocalDateStr(dateInput) {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatLocalMonthStr(dateInput) {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
 const ReportsManager = {
   trendChart: null,
   categoryChart: null,
   currentPeriod: 'daily', // daily, weekly, monthly, custom
-  selectedDate: new Date().toISOString().split('T')[0],
+  selectedDate: formatLocalDateStr(new Date()),
 
   /**
    * เริ่มต้นโมดูลรายงาน
@@ -99,7 +116,7 @@ const ReportsManager = {
     // 3. เรนเดอร์กราฟสัดส่วนหมวดหมู่ (Category Donut Chart)
     this.renderCategoryChart(filtered, products);
 
-    // 4. เรนเดอร์ตารางแจกแจงรายสินค้าและบิล
+    // 4. เรนเดอร์ตารางแจกแจงรายสินค้าและตารางประวัติรายการ
     this.renderProductBreakdownTable(filtered);
     this.renderTransactionsTable(filtered);
   },
@@ -108,35 +125,31 @@ const ReportsManager = {
    * กรอง Transaction ตามช่วงเวลาที่เลือก
    */
   filterTransactions(transactions) {
-    const now = new Date();
-
     if (this.currentPeriod === 'daily') {
       const targetDateStr = this.selectedDate;
       return transactions.filter(t => {
-        const tDateStr = new Date(t.timestamp).toISOString().split('T')[0];
+        const tDateStr = formatLocalDateStr(t.timestamp);
         return tDateStr === targetDateStr;
       });
     }
 
     if (this.currentPeriod === 'weekly') {
-      const selected = new Date(this.selectedDate);
+      const parts = (this.selectedDate || formatLocalDateStr(new Date())).split('-');
+      const selected = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 23, 59, 59, 999) : new Date();
       const startOfWeek = new Date(selected);
       startOfWeek.setDate(selected.getDate() - 6); // 7 วันล่าสุด
       startOfWeek.setHours(0, 0, 0, 0);
 
-      const endOfWeek = new Date(selected);
-      endOfWeek.setHours(23, 59, 59, 999);
-
       return transactions.filter(t => {
         const tDate = new Date(t.timestamp);
-        return tDate >= startOfWeek && tDate <= endOfWeek;
+        return tDate >= startOfWeek && tDate <= selected;
       });
     }
 
     if (this.currentPeriod === 'monthly') {
       const targetMonth = this.selectedDate.slice(0, 7); // YYYY-MM
       return transactions.filter(t => {
-        const tMonth = new Date(t.timestamp).toISOString().slice(0, 7);
+        const tMonth = formatLocalMonthStr(t.timestamp);
         return tMonth === targetMonth;
       });
     }
@@ -146,10 +159,10 @@ const ReportsManager = {
       const endVal = document.getElementById('report-end-date')?.value;
       if (!startVal || !endVal) return transactions;
 
-      const startDate = new Date(startVal);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(endVal);
-      endDate.setHours(23, 59, 59, 999);
+      const sParts = startVal.split('-');
+      const eParts = endVal.split('-');
+      const startDate = new Date(Number(sParts[0]), Number(sParts[1]) - 1, Number(sParts[2]), 0, 0, 0, 0);
+      const endDate = new Date(Number(eParts[0]), Number(eParts[1]) - 1, Number(eParts[2]), 23, 59, 59, 999);
 
       return transactions.filter(t => {
         const tDate = new Date(t.timestamp);

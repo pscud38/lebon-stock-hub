@@ -35,6 +35,44 @@ const AuthManager = {
       throw new Error('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
     }
 
+    if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
+      try {
+        const { url, key } = getSupabaseConfig();
+        const headers = {
+          'apikey': key,
+          'Authorization': 'Bearer ' + key,
+          'Content-Type': 'application/json'
+        };
+        const response = await fetch(`${url}/rest/v1/users?username=eq.${encodeURIComponent(u)}&select=*`, { headers });
+        if (response.ok) {
+          const users = await response.json();
+          if (users.length > 0) {
+            const dbUser = users[0];
+            if (dbUser.password === p) {
+              if (dbUser.status === 'inactive') {
+                const authErr = new Error('บัญชีผู้ใช้นี้ถูกระงับการใช้งาน');
+                authErr.isAuthRejection = true;
+                throw authErr;
+              }
+              const userObj = {
+                username: dbUser.username,
+                fullName: dbUser.full_name || dbUser.username,
+                role: dbUser.role || 'staff'
+              };
+              this.setCurrentUser(userObj);
+              return userObj;
+            }
+          }
+          const authErr = new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+          authErr.isAuthRejection = true;
+          throw authErr;
+        }
+      } catch (err) {
+        if (err && err.isAuthRejection) throw err;
+        console.warn('Supabase login error, checking fallback:', err);
+      }
+    }
+
     const apiUrl = getApiUrl();
     if (apiUrl) {
       try {
@@ -52,11 +90,16 @@ const AuthManager = {
           this.setCurrentUser(json.user);
           return json.user;
         } else {
-          throw new Error(json.error || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+          const authErr = new Error(json.error || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+          authErr.isAuthRejection = true;
+          throw authErr;
         }
       } catch (err) {
-        // ถ้า API มีปัญหาหรือยังไม่ได้ตั้ง sheet Users ให้ใช้ Local Fallback
-        console.warn('API login failed, checking fallback credentials:', err);
+        if (err && err.isAuthRejection) {
+          throw err;
+        }
+        // เฉพาะกรณีเกิดปัญหาเครือข่าย/ออฟไลน์ จึงจะอนุญาตให้ใช้ Local Fallback
+        console.warn('API login network failure, checking fallback credentials:', err);
       }
     }
 

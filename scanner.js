@@ -59,19 +59,33 @@ class BarcodeScannerManager {
         aspectRatio: 1.0
       };
 
-      await this.html5QrCode.start(
-        { facingMode: "environment" }, // กล้องหลัง
-        config,
-        (decodedText, decodedResult) => {
-          this.playBeep();
-          if (this.onScanSuccessCallback) {
-            this.onScanSuccessCallback(decodedText.trim());
-          }
-        },
-        (errorMessage) => {
-          // parse error, ignore continuously
-        }
-      );
+      try {
+        await this.html5QrCode.start(
+          { facingMode: "environment" }, // กล้องหลัง (สำหรับมือถือ)
+          config,
+          (decodedText, decodedResult) => {
+            this.playBeep();
+            if (this.onScanSuccessCallback) {
+              this.onScanSuccessCallback(decodedText.trim());
+            }
+          },
+          (errorMessage) => {}
+        );
+      } catch (camErr) {
+        // หากไม่มีกล้องหลัง (เช่น ใช้งานบนคอมพิวเตอร์/โน้ตบุ๊ก) ให้สลับไปใช้กล้องหน้า/Webcam แทน
+        console.warn("ไม่พบกล้องหลัง ลองสลับไปใช้กล้องหน้า/Webcam:", camErr);
+        await this.html5QrCode.start(
+          { facingMode: "user" },
+          config,
+          (decodedText, decodedResult) => {
+            this.playBeep();
+            if (this.onScanSuccessCallback) {
+              this.onScanSuccessCallback(decodedText.trim());
+            }
+          },
+          (errorMessage) => {}
+        );
+      }
 
       this.isScanning = true;
     } catch (err) {

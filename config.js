@@ -5,10 +5,14 @@
 
 const CONFIG = {
   SHOP_NAME: 'Lebon Toy',
+  SUPABASE_URL: 'https://wnfphiyumdsiukmdatld.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_4E3ft90p5-PLuAUq1PglVw_R_5SR_gH',
   DEFAULT_API_URL: 'https://script.google.com/macros/s/AKfycbzz8KQswE5FvwnicE3QhHKbIqO1j-kdVlVIsjAd4WBZG4JBBWNFRsoxhYoSHL6ZwwjhfQ/exec',
 
   STORAGE_KEYS: {
     API_URL: 'stock_sheets_api_url',
+    SUPABASE_URL: 'stock_supabase_url',
+    SUPABASE_KEY: 'stock_supabase_key',
     PRODUCTS: 'stock_local_products',
     TRANSACTIONS: 'stock_local_transactions',
     CATEGORIES: 'stock_local_categories',
@@ -218,6 +222,21 @@ const CONFIG = {
   ]
 };
 
+function getSupabaseConfig() {
+  let url = CONFIG.SUPABASE_URL;
+  let key = CONFIG.SUPABASE_KEY;
+  if (typeof localStorage !== 'undefined') {
+    url = localStorage.getItem(CONFIG.STORAGE_KEYS.SUPABASE_URL) || url;
+    key = localStorage.getItem(CONFIG.STORAGE_KEYS.SUPABASE_KEY) || key;
+  }
+  return { url, key };
+}
+
+function isSupabaseConfigured() {
+  const cfg = getSupabaseConfig();
+  return !!(cfg.url && cfg.key);
+}
+
 function getApiUrl() {
   if (typeof localStorage !== 'undefined') {
     return localStorage.getItem(CONFIG.STORAGE_KEYS.API_URL) || CONFIG.DEFAULT_API_URL;
@@ -232,12 +251,14 @@ function setApiUrl(url) {
 }
 
 function isOnlineMode() {
-  return !!getApiUrl();
+  return isSupabaseConfigured() || !!getApiUrl();
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     CONFIG,
+    getSupabaseConfig,
+    isSupabaseConfigured,
     getApiUrl,
     setApiUrl,
     isOnlineMode
