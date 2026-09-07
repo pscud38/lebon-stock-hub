@@ -971,6 +971,9 @@ const App = {
   },
 
   selectPosProduct(productId) {
+    // ซ่อนแบนเนอร์แจ้งเตือนสำเร็จเมื่อเริ่มเลือกสินค้าชิ้นใหม่
+    document.getElementById('pos-success-banner')?.classList.add('hidden');
+
     const select = document.getElementById('pos-product-select');
     const searchInput = document.getElementById('pos-search-input');
     const dropdown = document.getElementById('pos-search-dropdown');
@@ -996,6 +999,97 @@ const App = {
     }
 
     this.updatePosProductInfo(productId);
+  },
+
+  /**
+   * ส่งเสียงแจ้งเตือนบันทึกสำเร็จสั้นๆ สไตล์เครื่องสแกนบาร์โค้ด (Web Audio API)
+   */
+  playSuccessSound() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.07); // A5
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.22);
+    } catch (e) {}
+  },
+
+  /**
+   * เคลียร์ค่าที่กรอกไว้ในหน้ารับเข้า-เบิกขายทั้งหมด (Clear All POS Fields)
+   * เพื่อให้ผู้ใช้ทราบว่าบันทึกแล้ว และเคอร์เซอร์พร้อมสแกน/พิมพ์ชิ้นถัดไปทันที
+   */
+  clearPosForm(showSuccessAlert = false, summaryText = '') {
+    // 1. เคลียร์การเลือกสินค้า
+    const searchInput = document.getElementById('pos-search-input');
+    const clearBtn = document.getElementById('pos-search-clear-btn');
+    const select = document.getElementById('pos-product-select');
+    const dropdown = document.getElementById('pos-search-dropdown');
+    const infoCard = document.getElementById('pos-product-info-card');
+    const liveProfitCard = document.getElementById('pos-live-profit-card');
+
+    if (searchInput) searchInput.value = '';
+    this.posSearchKeyword = '';
+    if (clearBtn) clearBtn.classList.add('hidden');
+    if (select) select.value = '';
+    if (infoCard) infoCard.classList.add('hidden');
+    if (liveProfitCard) liveProfitCard.classList.add('hidden');
+    if (dropdown) dropdown.classList.add('hidden');
+
+    // 2. เคลียร์จำนวนและราคา
+    const qtyInput = document.getElementById('pos-qty-input');
+    if (qtyInput) qtyInput.value = '1';
+
+    const priceInput = document.getElementById('pos-unit-price-input');
+    if (priceInput) priceInput.value = '';
+
+    // 3. เคลียร์หมายเหตุและปุ่มเหตุผลด่วน
+    const noteInput = document.getElementById('pos-note-input');
+    if (noteInput) noteInput.value = '';
+
+    document.querySelectorAll('.pos-reason-pill').forEach(p => {
+      p.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-100', 'text-indigo-800', 'font-bold');
+    });
+
+    // 4. เคลียร์รูปถ่ายหลักฐาน
+    this.currentAttachedPhotoBase64 = null;
+    const photoInput = document.getElementById('pos-photo-input');
+    if (photoInput) photoInput.value = '';
+    document.getElementById('pos-photo-preview-container')?.classList.add('hidden');
+    document.getElementById('btn-remove-photo')?.classList.add('hidden');
+
+    // 5. แสดงแบนเนอร์ยืนยันบันทึกสำเร็จ (Success Confirmation Banner)
+    const banner = document.getElementById('pos-success-banner');
+    const bannerDetail = document.getElementById('pos-success-banner-detail');
+    if (showSuccessAlert && banner) {
+      if (bannerDetail && summaryText) {
+        bannerDetail.textContent = summaryText;
+      }
+      banner.classList.remove('hidden');
+
+      if (this.posSuccessTimeout) clearTimeout(this.posSuccessTimeout);
+      this.posSuccessTimeout = setTimeout(() => {
+        banner.classList.add('hidden');
+      }, 5000);
+    }
+
+    // 6. อัปเดตรายการค้นหาให้พร้อม
+    this.renderPosSearchResults();
+
+    // 7. นำเคอร์เซอร์ไปโฟกัสที่ช่องค้นหาทันที เพื่อพร้อมสแกน/พิมพ์ชิ้นถัดไป
+    setTimeout(() => {
+      if (searchInput && this.activeTab === 'pos') {
+        searchInput.focus();
+      }
+    }, 80);
   },
 
   clearPosSearch(focusInput = true) {
@@ -1298,19 +1392,31 @@ const App = {
         this.summary = window.appStore.state.summary;
       }
 
-      // ล้างฟอร์มและรูปถ่าย
-      document.getElementById('pos-qty-input').value = '1';
-      document.getElementById('pos-note-input').value = '';
-      this.currentAttachedPhotoBase64 = null;
-      document.getElementById('pos-photo-input').value = '';
-      document.getElementById('pos-photo-preview-container')?.classList.add('hidden');
-      document.getElementById('btn-remove-photo')?.classList.add('hidden');
-      document.querySelectorAll('.pos-reason-pill').forEach(p => {
-        p.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-100', 'text-indigo-800', 'font-bold');
-      });
+      const prodName = product ? product.productName : productId;
+      const prodId = product ? product.productId : productId;
+      const typeLabel = type === 'OUT' ? '📤 เบิกขาย' : (type === 'IN' ? '📥 รับเข้า' : '⚙️ ปรับยอด');
+      const summaryText = `${typeLabel} ${qty} ชิ้น: [${prodId}] ${prodName} เรียบร้อยแล้ว`;
 
+      // แสดงการตอบรับทางสายตาที่ปุ่มบันทึก (Button Visual Feedback)
+      const submitBtn = document.getElementById('pos-submit-btn');
+      if (submitBtn) {
+        const originalHtml = submitBtn.innerHTML;
+        submitBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+        submitBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+        submitBtn.innerHTML = '<span>🎉</span> บันทึกสำเร็จเรียบร้อย!';
+        setTimeout(() => {
+          submitBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
+          submitBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+          submitBtn.innerHTML = originalHtml;
+        }, 1200);
+      }
+
+      // เล่นเสียงยืนยันสั้นๆ สไตล์เครื่องสแกนบาร์โค้ด (Web Audio API)
+      this.playSuccessSound();
+
+      // เคลียร์ค่าที่กรอกไว้ทั้งหมดทันที และแสดงแบนเนอร์ยืนยันสีเขียวด้านบน
+      this.clearPosForm(true, summaryText);
       this.updateSyncUI();
-      this.selectPosProduct(productId);
     } catch (err) {
       this.showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
     } finally {

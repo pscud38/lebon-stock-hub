@@ -315,9 +315,30 @@
             </div>
           </div>
 
-            <!-- Fast Product Search & Filter for Stock In / Out -->
-            <div class="space-y-2">
-              <div class="flex items-center justify-between">
+          <!-- Success Confirmation Banner (Shows when transaction is saved and form is cleared) -->
+          <div id="pos-success-banner" class="hidden p-4 bg-emerald-50 border-2 border-emerald-400 rounded-2xl flex items-center justify-between gap-3 shadow-sm transition-all duration-300">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs shrink-0">
+                ✓
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                  <span>บันทึกรายการสำเร็จแล้ว!</span>
+                  <span class="text-[10px] px-1.5 py-0.2 bg-emerald-200 text-emerald-800 rounded font-mono font-bold">0ms</span>
+                </div>
+                <div id="pos-success-banner-detail" class="text-xs text-emerald-700 font-medium truncate mt-0.5">
+                  <!-- Dynamic text -->
+                </div>
+              </div>
+            </div>
+            <button type="button" onclick="document.getElementById('pos-success-banner').classList.add('hidden')" class="text-emerald-600 hover:text-emerald-800 p-1 text-sm font-bold shrink-0" title="ปิด">
+              ✕
+            </button>
+          </div>
+
+          <!-- Fast Product Search & Filter for Stock In / Out -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
                 <label class="block text-xs font-semibold text-slate-700 flex items-center gap-1.5">
                   <span>🔍</span> <span>ค้นหาและเลือกสินค้า</span>
                 </label>
@@ -473,7 +494,7 @@
             <button id="pos-submit-btn" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white rounded-xl font-bold shadow-md transition text-base flex items-center justify-center gap-2">
               <span>✅</span> ยืนยันบันทึกรายการ
             </button>
-            <p class="text-xs text-center text-slate-400 mt-2">ข้อมูลจะถูกตัดสต็อกและบันทึกลง Google Sheet ทันที</p>
+            <p class="text-xs text-center text-slate-400 mt-2">⚡ ข้อมูลจะถูกตัดสต็อกและบันทึกขึ้น Cloud ทันที (0 วินาที)</p>
           </div>
 
         </div>

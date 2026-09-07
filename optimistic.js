@@ -54,7 +54,10 @@ const OptimisticEngine = {
     updateSummaryBadgesDOM(store.getState('summary'));
     if (typeof App !== 'undefined') {
       if (App.renderPosSearchResults) App.renderPosSearchResults();
-      if (App.selectPosProduct) App.selectPosProduct(productId);
+      const currentSelected = document.getElementById('pos-product-select')?.value;
+      if (currentSelected === productId && App.updatePosProductInfo) {
+        App.updatePosProductInfo(productId);
+      }
     }
     showFlashNotice('⚡ ตัดสต็อกสำเร็จทันที (กำลังบันทึกขึ้น Cloud...)', 'info');
 
@@ -100,7 +103,10 @@ const OptimisticEngine = {
       updateSummaryBadgesDOM(store.getState('summary'));
       if (typeof App !== 'undefined') {
         if (App.renderPosSearchResults) App.renderPosSearchResults();
-        if (App.selectPosProduct) App.selectPosProduct(productId);
+        const currentSelected = document.getElementById('pos-product-select')?.value;
+        if (currentSelected === productId && App.updatePosProductInfo) {
+          App.updatePosProductInfo(productId);
+        }
       }
 
       // 6. ส่งข้อความชดเชยบอกแท็บอื่นให้คืนค่าตามทันที
@@ -166,7 +172,10 @@ const OptimisticEngine = {
     updateSummaryBadgesDOM(store.getState('summary'));
     if (typeof App !== 'undefined') {
       if (App.renderPosSearchResults) App.renderPosSearchResults();
-      if (App.selectPosProduct) App.selectPosProduct(productId);
+      const currentSelected = document.getElementById('pos-product-select')?.value;
+      if (currentSelected === productId && App.updatePosProductInfo) {
+        App.updatePosProductInfo(productId);
+      }
     }
     showFlashNotice('⚡ รับเข้าสำเร็จทันที (กำลังบันทึกขึ้น Cloud...)', 'info');
 
@@ -208,7 +217,10 @@ const OptimisticEngine = {
       updateSummaryBadgesDOM(store.getState('summary'));
       if (typeof App !== 'undefined') {
         if (App.renderPosSearchResults) App.renderPosSearchResults();
-        if (App.selectPosProduct) App.selectPosProduct(productId);
+        const currentSelected = document.getElementById('pos-product-select')?.value;
+        if (currentSelected === productId && App.updatePosProductInfo) {
+          App.updatePosProductInfo(productId);
+        }
       }
 
       store.broadcast('TRANSACTION_ROLLBACK', {
