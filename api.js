@@ -26,11 +26,10 @@ if (typeof globalThis.CONFIG === 'undefined' && typeof require !== 'undefined') 
 function calculateWAC(currentStock, currentCost, inQty, inCost) {
   const sOld = Math.max(0, Number(currentStock) || 0);
   const cOld = Number(currentCost) || 0;
-  const qIn = Number(inQty) || 0;
-  const cIn = (inCost !== undefined && inCost !== null && inCost !== '') ? Number(inCost) : 0;
+  const qIn = Math.max(0, Number(inQty) || 0);
+  const cIn = (inCost !== undefined && inCost !== null && inCost !== '') ? Math.max(0, Number(inCost)) : 0;
 
   if (qIn <= 0) return cOld;
-  if (cIn <= 0) return cOld;
   if (sOld <= 0) return Number(cIn.toFixed(2));
 
   const newWac = ((sOld * cOld) + (qIn * cIn)) / (sOld + qIn);
@@ -180,10 +179,10 @@ const ApiService = {
         const headers = getSupabaseHeaders();
 
         const [prodRes, transRes, catRes, userRes] = await Promise.all([
-          fetch(`${url}/rest/v1/products?select=*&order=product_id.asc`, { headers }),
-          fetch(`${url}/rest/v1/transactions?select=*&order=timestamp.desc&limit=150`, { headers }),
-          fetch(`${url}/rest/v1/categories?select=*&order=name.asc`, { headers }),
-          fetch(`${url}/rest/v1/users?select=username,full_name,role,status,created_at&order=username.asc`, { headers })
+          fetch(`${url}/rest/v1/products?select=*&order=product_id.asc`, { headers, cache: 'no-store' }),
+          fetch(`${url}/rest/v1/transactions?select=*&order=timestamp.desc&limit=150`, { headers, cache: 'no-store' }),
+          fetch(`${url}/rest/v1/categories?select=*&order=name.asc`, { headers, cache: 'no-store' }),
+          fetch(`${url}/rest/v1/users?select=username,full_name,role,status,created_at&order=username.asc`, { headers, cache: 'no-store' })
         ]);
 
         if (prodRes.ok && transRes.ok) {
@@ -850,6 +849,44 @@ const ApiService = {
     }
 
     return this.deleteLocalProduct(productId);
+  },
+
+  /**
+   * ปิดการแจ้งเตือนสต็อกใกล้หมด (Targeted PATCH - ป้องกัน BUG-01 ไม่ลบต้นทุน)
+   */
+  async muteProductAlert(productId) {
+    if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
+      try {
+        const { url } = getSupabaseConfig();
+        const headers = getSupabaseHeaders();
+        const res = await fetch(`${url}/rest/v1/products?product_id=eq.${encodeURIComponent(productId)}`, {
+          method: 'PATCH',
+          headers: headers,
+          body: JSON.stringify({
+            min_alert: -1,
+            last_updated: new Date().toISOString()
+          })
+        });
+
+        if (!res.ok) {
+          const errTxt = await res.text();
+          throw new Error('Supabase muteProductAlert failed: ' + errTxt);
+        }
+
+        return { success: true, message: 'ปิดการแจ้งเตือนสำเร็จ' };
+      } catch (sbErr) {
+        console.error('Supabase mute alert error:', sbErr);
+        throw sbErr;
+      }
+    }
+
+    const products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS)) || [];
+    const p = products.find(x => x.productId === productId);
+    if (p) {
+      p.minAlert = -1;
+      localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    }
+    return { success: true, message: 'ปิดการแจ้งเตือนสำเร็จ' };
   },
 
   /**

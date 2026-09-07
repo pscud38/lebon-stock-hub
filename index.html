@@ -37,6 +37,7 @@
   <!-- External Libraries (Chart.js & Html5Qrcode) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Custom CSS -->
   <link rel="stylesheet" href="styles.css">
@@ -1149,19 +1150,50 @@
     </div>
   </div>
 
-  <!-- Application Scripts -->
-  <script src="config.js"></script>
-  <script src="auth.js"></script>
-  <script src="api.js"></script>
-  <script src="scanner.js"></script>
-  <script src="reports.js"></script>
-  <script src="app.js"></script>
+  <!-- Application Scripts with Version Cache-Busting -->
+  <script src="config.js?v=4.0.0"></script>
+  <script src="auth.js?v=4.0.0"></script>
+  <script src="api.js?v=4.0.0"></script>
+  <script src="store.js?v=4.0.0"></script>
+  <script src="optimistic.js?v=4.0.0"></script>
+  <script src="scanner.js?v=4.0.0"></script>
+  <script src="reports.js?v=4.0.0"></script>
+  <script src="app.js?v=4.0.0"></script>
 
-  <!-- PWA Service Worker Registration -->
+  <!-- PWA Service Worker Registration & Auto-Update Lifecycle -->
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err));
+      window.addEventListener('load', async () => {
+        try {
+          const reg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
+          
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+              reg.update().catch(() => {});
+            }
+          });
+
+          setInterval(() => {
+            reg.update().catch(() => {});
+          }, 15 * 60 * 1000);
+
+          let isRefreshing = false;
+          let hasController = Boolean(navigator.serviceWorker.controller);
+
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!hasController) {
+              hasController = true;
+              return;
+            }
+            if (!isRefreshing) {
+              isRefreshing = true;
+              console.log('[PWA] New version activated, reloading...');
+              window.location.reload();
+            }
+          });
+        } catch (err) {
+          console.warn('[PWA] ServiceWorker registration failed:', err);
+        }
       });
     }
   </script>

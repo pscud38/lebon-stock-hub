@@ -57,6 +57,14 @@ const App = {
         this.users = cached.users || [];
         this.summary = cached.summary || {};
 
+        if (window.appStore) {
+          window.appStore.state.products = this.products;
+          window.appStore.state.transactions = this.transactions;
+          window.appStore.state.categories = this.categories;
+          window.appStore.state.users = this.users;
+          window.appStore.state.summary = this.summary;
+        }
+
         this.renderDashboard();
         this.renderProducts();
         this.renderHistory();
@@ -174,6 +182,14 @@ const App = {
       this.categories = data.categories || [];
       this.users = data.users || [];
       this.summary = data.summary || {};
+
+      if (window.appStore) {
+        window.appStore.state.products = this.products;
+        window.appStore.state.transactions = this.transactions;
+        window.appStore.state.categories = this.categories;
+        window.appStore.state.users = this.users;
+        window.appStore.state.summary = this.summary;
+      }
 
       this.renderDashboard();
       this.renderProducts();
@@ -376,7 +392,7 @@ const App = {
       ` : '';
 
       return `
-        <tr class="border-b border-slate-100 hover:bg-slate-50 transition text-sm">
+        <tr data-product-id="${p.productId}" class="border-b border-slate-100 hover:bg-slate-50 transition text-sm">
           <td class="px-4 py-3 font-mono text-xs text-slate-600 font-semibold">${p.productId}</td>
           <td class="px-4 py-3">
             <div class="font-medium text-slate-800">${p.productName}</div>
@@ -384,8 +400,8 @@ const App = {
           </td>
           ${adminCols}
           <td class="px-4 py-3 text-right font-medium text-slate-800">฿${(p.salePrice || 0).toLocaleString()}</td>
-          ${profitCol}
-          <td class="px-4 py-3 text-center">${stockBadge}</td>
+          <td class="px-4 py-3 text-right col-profit">${isAdmin ? profitBadge : ''}</td>
+          <td class="px-4 py-3 text-center col-stock">${stockBadge}</td>
           <td class="px-4 py-3 text-center whitespace-nowrap">
             <button onclick="App.openQuickTransModal('${p.productId}', 'OUT')" class="px-2 py-1 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded text-xs mr-1 font-medium">เบิกขาย</button>
             <button onclick="App.openQuickTransModal('${p.productId}', 'IN')" class="px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded text-xs mr-1 font-medium">รับเข้า</button>
@@ -1239,21 +1255,49 @@ const App = {
     const product = this.products.find(p => p.productId === productId);
 
     try {
-      this.showLoading(true);
-      const res = await ApiService.addTransaction({
-        productId,
-        type,
-        quantity: qty,
-        salePrice: (type === 'OUT' && customPrice !== null && customPrice >= 0) ? customPrice : (product ? product.salePrice : undefined),
-        costPrice: (type === 'IN' && customPrice !== null && customPrice >= 0) ? customPrice : (product ? product.costPrice : undefined),
-        operator,
-        note,
-        role: (user && user.role) ? user.role : 'staff',
-        imageBase64: this.currentAttachedPhotoBase64
-      });
+      if (type === 'OUT' && typeof OptimisticEngine !== 'undefined') {
+        await OptimisticEngine.executeStockOut({
+          productId,
+          quantity: qty,
+          customPrice,
+          operator,
+          note,
+          imageBase64: this.currentAttachedPhotoBase64
+        });
+      } else if (type === 'IN' && typeof OptimisticEngine !== 'undefined') {
+        await OptimisticEngine.executeStockIn({
+          productId,
+          quantity: qty,
+          costPrice: (customPrice !== null && customPrice >= 0) ? customPrice : (product ? product.costPrice : undefined),
+          operator,
+          note,
+          imageBase64: this.currentAttachedPhotoBase64
+        });
+      } else {
+        // Fallback or ADJUST
+        this.showLoading(true);
+        const res = await ApiService.addTransaction({
+          productId,
+          type,
+          quantity: qty,
+          salePrice: (type === 'OUT' && customPrice !== null && customPrice >= 0) ? customPrice : (product ? product.salePrice : undefined),
+          costPrice: (type === 'IN' && customPrice !== null && customPrice >= 0) ? customPrice : (product ? product.costPrice : undefined),
+          operator,
+          note,
+          role: (user && user.role) ? user.role : 'staff',
+          imageBase64: this.currentAttachedPhotoBase64
+        });
+        this.showToast(res.message || 'บันทึกรายการสำเร็จ!', 'success');
+        await this.refreshData();
+      }
 
-      this.showToast(res.message || 'บันทึกรายการและตัดสต็อกสำเร็จ!', 'success');
-      
+      // Synchronize this.products reference with window.appStore
+      if (window.appStore) {
+        this.products = window.appStore.state.products;
+        this.transactions = window.appStore.state.transactions;
+        this.summary = window.appStore.state.summary;
+      }
+
       // ล้างฟอร์มและรูปถ่าย
       document.getElementById('pos-qty-input').value = '1';
       document.getElementById('pos-note-input').value = '';
@@ -1265,7 +1309,6 @@ const App = {
         p.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-100', 'text-indigo-800', 'font-bold');
       });
 
-      await this.refreshData();
       this.updateSyncUI();
       this.selectPosProduct(productId);
     } catch (err) {
@@ -1490,6 +1533,28 @@ const App = {
 
       this.showToast(res.message || 'บันทึกสินค้าสำเร็จ!', 'success');
       this.closeProductModal();
+
+      const savedProd = {
+        productId,
+        productName,
+        category,
+        unit,
+        costPrice,
+        salePrice,
+        currentStock: (!isEdit || isStockChanged) ? initialStock : (existingProduct ? existingProduct.currentStock : initialStock),
+        minAlert,
+        isAlertEnabled: minAlert !== -1
+      };
+      if (window.appStore) {
+        const idx = window.appStore.state.products.findIndex(p => p.productId === productId);
+        if (idx !== -1) {
+          window.appStore.state.products[idx] = { ...window.appStore.state.products[idx], ...savedProd };
+        } else {
+          window.appStore.state.products.push(savedProd);
+        }
+        window.appStore.broadcast('PRODUCT_UPDATED', savedProd);
+      }
+
       await this.refreshData();
     } catch (err) {
       this.showToast('เกิดข้อผิดพลาด: ' + err.message, 'error');
@@ -1507,14 +1572,14 @@ const App = {
     }
 
     try {
-      this.showLoading(true);
-      await ApiService.saveProduct({
-        ...product,
-        minAlert: -1,
-        updateStock: false
-      });
-      this.showToast(`🔕 ปิดการแจ้งเตือนสำหรับ "${product.productName}" แล้ว`, 'info');
-      await this.refreshData();
+      if (typeof OptimisticEngine !== 'undefined' && OptimisticEngine.executeMuteAlert) {
+        await OptimisticEngine.executeMuteAlert(productId);
+      } else {
+        this.showLoading(true);
+        await ApiService.muteProductAlert(productId);
+        this.showToast(`🔕 ปิดการแจ้งเตือนสำหรับ "${product.productName}" แล้ว`, 'info');
+        await this.refreshData();
+      }
     } catch (err) {
       this.showToast('ไม่สามารถปิดการเตือนได้: ' + err.message, 'error');
     } finally {
@@ -1528,6 +1593,11 @@ const App = {
       this.showLoading(true);
       const res = await ApiService.deleteProduct(productId);
       this.showToast(res.message || 'ลบสินค้าสำเร็จ', 'success');
+      if (window.appStore) {
+        const idx = window.appStore.state.products.findIndex(p => p.productId === productId);
+        if (idx !== -1) window.appStore.state.products.splice(idx, 1);
+        window.appStore.recalculateSummary();
+      }
       await this.refreshData();
     } catch (err) {
       this.showToast('ลบไม่สำเร็จ: ' + err.message, 'error');
