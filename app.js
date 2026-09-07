@@ -12,6 +12,8 @@ const App = {
   summary: {},
   selectedCategory: 'ALL',
   searchQuery: '',
+  posSelectedCategory: 'all', // หมวดหมู่ที่เลือกในหน้ารับเข้า-เบิกจ่าย
+  posSearchKeyword: '', // คำค้นหาในหน้ารับเข้า-เบิกจ่าย
   currentAttachedPhotoBase64: null, // เก็บรูปภาพ Base64 ที่ถ่าย/แนบมา
   deferredPrompt: null, // PWA Install prompt event
   batchRows: [], // รายการในโมดอลรับเข้าล็อตใหญ่
@@ -211,28 +213,36 @@ const App = {
 
     const lowStockContainer = document.getElementById('dash-low-stock-list');
     if (lowStockContainer) {
-      const lowList = this.products.filter(p => (p.currentStock || 0) <= (p.minAlert || 5));
+      const lowList = this.products.filter(p => this.isProductLowStock(p));
       if (lowList.length === 0) {
         lowStockContainer.innerHTML = `
           <div class="py-6 text-center text-emerald-600 bg-emerald-50 rounded-xl">
-            <span class="text-lg">🎉</span> สต็อกสินค้าทุกรายการอยู่ในเกณฑ์ปกติ
+            <span class="text-lg">🎉</span> สต็อกสินค้าทุกรายการอยู่ในเกณฑ์ปกติ (ไม่มีรายการใกล้หมด)
           </div>
         `;
       } else {
-        lowStockContainer.innerHTML = lowList.map(p => `
+        lowStockContainer.innerHTML = lowList.map(p => {
+          const threshold = (p.minAlert !== undefined && p.minAlert !== null && p.minAlert !== '') ? Number(p.minAlert) : 5;
+          const isZeroAlert = threshold === 0;
+          const alertText = isZeroAlert ? 'เตือนเมื่อ: หมด (0 ชิ้น)' : `เตือนเมื่อ &le; ${threshold} ${p.unit}`;
+          return `
           <div class="flex items-center justify-between p-3 rounded-lg bg-amber-50 border border-amber-200">
             <div>
               <div class="font-medium text-slate-800">${p.productName}</div>
               <div class="text-xs text-slate-500 font-mono">รหัส: ${p.productId} | หมวด: ${p.category}</div>
             </div>
-            <div class="text-right">
-              <span class="px-2 py-1 bg-amber-200 text-amber-900 font-bold rounded-lg text-sm">
-                เหลือ ${p.currentStock} ${p.unit}
-              </span>
-              <div class="text-xs text-amber-700 mt-1">เตือนเมื่อ &le; ${p.minAlert}</div>
+            <div class="text-right flex items-center gap-2">
+              <div>
+                <span class="px-2 py-1 ${p.currentStock <= 0 ? 'bg-rose-200 text-rose-900' : 'bg-amber-200 text-amber-900'} font-bold rounded-lg text-sm">
+                  ${p.currentStock <= 0 ? 'หมดเกลี้ยง (0)' : `เหลือ ${p.currentStock} ${p.unit}`}
+                </span>
+                <div class="text-xs text-amber-700 mt-1">${alertText}</div>
+              </div>
+              <button type="button" onclick="App.muteProductAlert('${p.productId}')" class="px-2 py-1 text-xs bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg transition font-medium" title="ปิดการแจ้งเตือนสำหรับสินค้านี้">🔕 ปิดเตือน</button>
             </div>
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
     }
 
@@ -331,10 +341,20 @@ const App = {
     }
 
     tbody.innerHTML = filtered.map(p => {
-      const isLow = (p.currentStock || 0) <= (p.minAlert || 5);
+      const isLow = this.isProductLowStock(p);
+      const isAlertDisabled = (p.minAlert === -1 || p.minAlert === '-1' || p.isAlertEnabled === false);
+      let alertInfo = '';
+      if (isAlertDisabled) {
+        alertInfo = '<span class="text-[10px] text-slate-400 block font-normal">🔕 ปิดเตือน</span>';
+      } else if (Number(p.minAlert) === 0) {
+        alertInfo = '<span class="text-[10px] text-amber-600 block font-normal">เตือนเมื่อหมด (0)</span>';
+      } else if (Number(p.minAlert) > 0) {
+        alertInfo = `<span class="text-[10px] text-slate-400 block font-normal">เตือน &le; ${p.minAlert}</span>`;
+      }
+
       const stockBadge = isLow 
-        ? `<span class="px-2 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-700">ใกล้หมด (${p.currentStock} ${p.unit})</span>`
-        : `<span class="px-2 py-1 rounded-md text-xs font-medium bg-emerald-100 text-emerald-800">${p.currentStock} ${p.unit}</span>`;
+        ? `<div><span class="px-2 py-0.5 rounded-md text-xs font-bold bg-rose-100 text-rose-700">${p.currentStock <= 0 ? 'หมดเกลี้ยง (0)' : `ใกล้หมด (${p.currentStock} ${p.unit})`}</span>${alertInfo}</div>`
+        : `<div><span class="px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-100 text-emerald-800">${p.currentStock} ${p.unit}</span>${alertInfo}</div>`;
 
       const profit = (p.salePrice || 0) - (p.costPrice || 0);
       const margin = p.salePrice > 0 ? ((profit / p.salePrice) * 100).toFixed(1) : '0.0';
@@ -809,6 +829,52 @@ const App = {
       });
     }
 
+    // ระบบค้นหาสินค้าความเร็วสูงในหน้ารับเข้า-เบิกจ่าย (Fast Product Search)
+    const searchInput = document.getElementById('pos-search-input');
+    const clearBtn = document.getElementById('pos-search-clear-btn');
+    const dropdown = document.getElementById('pos-search-dropdown');
+    const btnChangeProduct = document.getElementById('pos-btn-change-product');
+
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        this.posSearchKeyword = e.target.value;
+        this.renderPosSearchResults();
+        if (dropdown) dropdown.classList.remove('hidden');
+        if (clearBtn) {
+          if (e.target.value.trim().length > 0) {
+            clearBtn.classList.remove('hidden');
+          } else {
+            clearBtn.classList.add('hidden');
+          }
+        }
+      });
+
+      searchInput.addEventListener('focus', () => {
+        this.renderPosSearchResults();
+        if (dropdown) dropdown.classList.remove('hidden');
+      });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.clearPosSearch(true);
+      });
+    }
+
+    if (btnChangeProduct) {
+      btnChangeProduct.addEventListener('click', () => {
+        this.clearPosSearch(true);
+      });
+    }
+
+    // ปิดดรอปดาวน์ค้นหาเมื่อคลิกนอกพื้นที่
+    document.addEventListener('click', (e) => {
+      const searchBoxContainer = document.getElementById('pos-search-input')?.closest('.space-y-2');
+      if (searchBoxContainer && !searchBoxContainer.contains(e.target)) {
+        dropdown?.classList.add('hidden');
+      }
+    });
+
     const posTypeSelect = document.getElementById('pos-type-select');
     if (posTypeSelect) {
       posTypeSelect.addEventListener('change', () => {
@@ -888,17 +954,179 @@ const App = {
     document.getElementById('pos-submit-btn')?.addEventListener('click', () => this.submitPosTransaction());
   },
 
-  handleScannedCode(code) {
+  selectPosProduct(productId) {
     const select = document.getElementById('pos-product-select');
-    if (!select) return;
+    const searchInput = document.getElementById('pos-search-input');
+    const dropdown = document.getElementById('pos-search-dropdown');
+    const clearBtn = document.getElementById('pos-search-clear-btn');
 
-    const found = this.products.find(p => p.productId.toLowerCase() === code.toLowerCase());
+    const product = this.products.find(p => p.productId === productId);
+    if (!product) return;
+
+    if (select) {
+      select.value = productId;
+    }
+
+    if (searchInput) {
+      searchInput.value = `[${product.productId}] ${product.productName}`;
+    }
+
+    if (clearBtn) {
+      clearBtn.classList.remove('hidden');
+    }
+
+    if (dropdown) {
+      dropdown.classList.add('hidden');
+    }
+
+    this.updatePosProductInfo(productId);
+  },
+
+  clearPosSearch(focusInput = true) {
+    const searchInput = document.getElementById('pos-search-input');
+    const clearBtn = document.getElementById('pos-search-clear-btn');
+    const select = document.getElementById('pos-product-select');
+    const dropdown = document.getElementById('pos-search-dropdown');
+    const infoCard = document.getElementById('pos-product-info-card');
+    const liveProfitCard = document.getElementById('pos-live-profit-card');
+
+    if (searchInput) searchInput.value = '';
+    this.posSearchKeyword = '';
+    if (clearBtn) clearBtn.classList.add('hidden');
+    if (select) select.value = '';
+    if (infoCard) infoCard.classList.add('hidden');
+    if (liveProfitCard) liveProfitCard.classList.add('hidden');
+
+    this.renderPosSearchResults();
+    if (dropdown) dropdown.classList.remove('hidden');
+    if (focusInput && searchInput) searchInput.focus();
+  },
+
+  renderPosCategoryPills() {
+    const container = document.getElementById('pos-category-pills');
+    if (!container) return;
+
+    const allCats = ['all', ...(this.categories || [])];
+    container.innerHTML = allCats.map(cat => {
+      const isSelected = (this.posSelectedCategory || 'all').toLowerCase() === cat.toLowerCase();
+      const label = cat === 'all' ? '🌟 ทั้งหมด' : cat;
+      const activeClass = isSelected
+        ? 'bg-indigo-600 text-white shadow-xs font-bold'
+        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium';
+      return `
+        <button type="button" 
+          onclick="App.setPosCategory('${cat}')" 
+          class="px-2.5 py-1 rounded-full whitespace-nowrap transition text-xs ${activeClass}">
+          ${label}
+        </button>
+      `;
+    }).join('');
+  },
+
+  setPosCategory(cat) {
+    this.posSelectedCategory = cat;
+    this.renderPosCategoryPills();
+    this.renderPosSearchResults();
+    const dropdown = document.getElementById('pos-search-dropdown');
+    if (dropdown) dropdown.classList.remove('hidden');
+  },
+
+  renderPosSearchResults() {
+    const dropdown = document.getElementById('pos-search-dropdown');
+    const countBadge = document.getElementById('pos-search-count-badge');
+    if (!dropdown) return;
+
+    let list = this.products || [];
+
+    // กรองตามหมวดหมู่
+    if (this.posSelectedCategory && this.posSelectedCategory.toLowerCase() !== 'all') {
+      list = list.filter(p => (p.category || '').toLowerCase() === this.posSelectedCategory.toLowerCase());
+    }
+
+    // กรองตามคำค้นหา (ชื่อสินค้า, รหัส, บาร์โค้ด, หมวด)
+    const kw = (this.posSearchKeyword || '').trim().toLowerCase();
+    if (kw) {
+      list = list.filter(p => 
+        (p.productName && p.productName.toLowerCase().includes(kw)) ||
+        (p.productId && p.productId.toLowerCase().includes(kw)) ||
+        (p.barcode && String(p.barcode).toLowerCase().includes(kw)) ||
+        (p.category && p.category.toLowerCase().includes(kw))
+      );
+    }
+
+    if (countBadge) {
+      countBadge.textContent = `พบ ${list.length} จาก ${this.products.length} รายการ`;
+    }
+
+    if (list.length === 0) {
+      dropdown.innerHTML = `
+        <div class="p-4 text-center text-slate-400 text-xs">
+          <span>🔍 ไม่พบสินค้าที่ตรงกับคำค้นหา</span>
+          ${kw ? `<div class="mt-1 text-slate-500 font-mono">"${kw}"</div>` : ''}
+        </div>
+      `;
+      return;
+    }
+
+    dropdown.innerHTML = list.map(p => {
+      const isLow = this.isProductLowStock(p);
+      const stockColor = p.currentStock <= 0 
+        ? 'text-rose-600 font-bold' 
+        : isLow 
+        ? 'text-amber-600 font-bold' 
+        : 'text-slate-600 font-medium';
+      
+      const stockBadge = p.currentStock <= 0
+        ? '<span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold">หมด (0)</span>'
+        : isLow
+        ? `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">ใกล้หมด</span>`
+        : '';
+
+      const isAdmin = AuthManager.isAdmin();
+      const costBadge = (isAdmin && p.costPrice !== undefined)
+        ? `<span class="text-slate-400 text-[11px]">(ทุน ฿${Number(p.costPrice).toLocaleString()})</span>`
+        : '';
+
+      return `
+        <div onclick="App.selectPosProduct('${p.productId}')"
+          class="p-2.5 hover:bg-indigo-50 cursor-pointer flex items-center justify-between transition group">
+          <div class="flex-1 min-w-0 pr-2">
+            <div class="flex items-center gap-1.5">
+              <span class="font-mono text-xs font-bold text-indigo-600 group-hover:text-indigo-800">${p.productId}</span>
+              <span class="font-medium text-xs text-slate-800 truncate group-hover:text-indigo-950">${p.productName}</span>
+              ${stockBadge}
+            </div>
+            <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+              <span class="px-1.5 py-0.2 bg-slate-100 rounded text-slate-600">${p.category || 'ทั่วไป'}</span>
+              <span>ราคาขาย <b>฿${Number(p.salePrice || 0).toLocaleString()}</b></span>
+              ${costBadge}
+            </div>
+          </div>
+          <div class="text-right whitespace-nowrap">
+            <div class="text-xs ${stockColor}">
+              ${p.currentStock} ${p.unit || 'ชิ้น'}
+            </div>
+            <button type="button" class="mt-0.5 px-2 py-0.5 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white text-indigo-700 rounded text-[10px] font-semibold transition">
+              เลือก
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  handleScannedCode(code) {
+    if (!code) return;
+    const cleanCode = String(code).trim().toLowerCase();
+    const found = this.products.find(p => 
+      (p.productId && p.productId.toLowerCase() === cleanCode) ||
+      (p.barcode && String(p.barcode).trim().toLowerCase() === cleanCode)
+    );
     if (found) {
-      select.value = found.productId;
-      this.updatePosProductInfo(found.productId);
+      this.selectPosProduct(found.productId);
       this.showToast(`สแกนพบ: ${found.productName}`, 'success');
     } else {
-      this.showToast(`ไม่พบรหัสสินค้า: ${code}`, 'warning');
+      this.showToast(`ไม่พบรหัสสินค้าหรือบาร์โค้ด: ${code}`, 'warning');
     }
   },
 
@@ -1039,12 +1267,39 @@ const App = {
 
       await this.refreshData();
       this.updateSyncUI();
-      this.updatePosProductInfo(productId);
+      this.selectPosProduct(productId);
     } catch (err) {
       this.showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
     } finally {
       this.showLoading(false);
     }
+  },
+
+  isProductLowStock(p) {
+    if (!p) return false;
+    if (p.minAlert === -1 || p.minAlert === '-1' || p.isAlertEnabled === false) return false;
+    const threshold = (p.minAlert !== undefined && p.minAlert !== null && p.minAlert !== '') ? Number(p.minAlert) : 5;
+    if (isNaN(threshold) || threshold < 0) return false;
+    return (Number(p.currentStock) || 0) <= threshold;
+  },
+
+  getNextProductId() {
+    let maxNum = 0;
+    (this.products || []).forEach(p => {
+      const match = String(p.productId || '').trim().match(/^TOY-(\d+)$/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+    let nextNum = maxNum + 1;
+    const existingIds = new Set((this.products || []).map(p => String(p.productId || '').toLowerCase().trim()));
+    while (existingIds.has(('TOY-' + String(nextNum).padStart(3, '0')).toLowerCase())) {
+      nextNum++;
+    }
+    return 'TOY-' + String(nextNum).padStart(3, '0');
   },
 
   bindModals() {
@@ -1063,6 +1318,47 @@ const App = {
       });
     });
 
+    const idInput = document.getElementById('modal-product-id');
+    const idWarning = document.getElementById('modal-product-id-warning');
+    if (idInput && idWarning) {
+      idInput.addEventListener('input', (e) => {
+        if (idInput.readOnly) {
+          idWarning.classList.add('hidden');
+          return;
+        }
+        const val = e.target.value.trim().toLowerCase();
+        if (!val) {
+          idWarning.classList.add('hidden');
+          idInput.classList.remove('border-rose-500', 'ring-1', 'ring-rose-500');
+          return;
+        }
+        const dup = this.products.find(p => p.productId.toLowerCase() === val);
+        if (dup) {
+          idWarning.textContent = `⚠️ รหัสนี้ถูกใช้งานแล้วโดย: ${dup.productName}`;
+          idWarning.classList.remove('hidden');
+          idInput.classList.add('border-rose-500', 'ring-1', 'ring-rose-500');
+        } else {
+          idWarning.classList.add('hidden');
+          idInput.classList.remove('border-rose-500', 'ring-1', 'ring-rose-500');
+        }
+      });
+    }
+
+    const alertToggle = document.getElementById('modal-product-alert-toggle');
+    const minAlertInput = document.getElementById('modal-product-minalert');
+    if (alertToggle && minAlertInput) {
+      alertToggle.addEventListener('change', () => {
+        if (alertToggle.checked) {
+          minAlertInput.disabled = false;
+          if (Number(minAlertInput.value) < 0) minAlertInput.value = '5';
+          minAlertInput.classList.remove('opacity-50', 'bg-slate-100');
+        } else {
+          minAlertInput.disabled = true;
+          minAlertInput.classList.add('opacity-50', 'bg-slate-100');
+        }
+      });
+    }
+
     document.getElementById('product-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       await this.saveProductFromModal();
@@ -1071,17 +1367,28 @@ const App = {
 
   openAddProductModal() {
     document.getElementById('modal-product-title').textContent = '➕ เพิ่มสินค้าใหม่';
-    document.getElementById('modal-product-id').value = 'TOY-' + String(this.products.length + 1).padStart(3, '0');
-    document.getElementById('modal-product-id').readOnly = false;
+    const idInput = document.getElementById('modal-product-id');
+    idInput.value = this.getNextProductId();
+    idInput.readOnly = false;
+    idInput.classList.remove('border-rose-500', 'ring-1', 'ring-rose-500');
+    document.getElementById('modal-product-id-warning')?.classList.add('hidden');
     document.getElementById('modal-product-name').value = '';
     document.getElementById('modal-product-category').value = this.categories[0] || 'Art Toy / กล่องสุ่ม';
     document.getElementById('modal-product-unit').value = 'ชิ้น';
     document.getElementById('modal-product-cost').value = '0';
     document.getElementById('modal-product-sale').value = '0';
     document.getElementById('modal-product-stock').value = '0';
-    document.getElementById('modal-product-minalert').value = '5';
-    document.getElementById('modal-profit-preview').textContent = 'กำไร: ฿0 (0.0%)';
+    
+    const alertToggle = document.getElementById('modal-product-alert-toggle');
+    if (alertToggle) alertToggle.checked = true;
+    const alertInput = document.getElementById('modal-product-minalert');
+    if (alertInput) {
+      alertInput.value = '5';
+      alertInput.disabled = false;
+      alertInput.classList.remove('opacity-50', 'bg-slate-100');
+    }
 
+    document.getElementById('modal-profit-preview').textContent = 'กำไร: ฿0 (0.0%)';
     document.getElementById('product-modal')?.classList.remove('hidden');
   },
 
@@ -1090,15 +1397,31 @@ const App = {
     if (!product) return;
 
     document.getElementById('modal-product-title').textContent = '✏️ แก้ไขสินค้า';
-    document.getElementById('modal-product-id').value = product.productId;
-    document.getElementById('modal-product-id').readOnly = true;
+    const idInput = document.getElementById('modal-product-id');
+    idInput.value = product.productId;
+    idInput.readOnly = true;
+    idInput.classList.remove('border-rose-500', 'ring-1', 'ring-rose-500');
+    document.getElementById('modal-product-id-warning')?.classList.add('hidden');
     document.getElementById('modal-product-name').value = product.productName;
     document.getElementById('modal-product-category').value = product.category;
     document.getElementById('modal-product-unit').value = product.unit;
     document.getElementById('modal-product-cost').value = product.costPrice;
     document.getElementById('modal-product-sale').value = product.salePrice;
     document.getElementById('modal-product-stock').value = product.currentStock;
-    document.getElementById('modal-product-minalert').value = product.minAlert;
+
+    const isAlertDisabled = (product.minAlert === -1 || product.minAlert === '-1' || product.isAlertEnabled === false);
+    const alertToggle = document.getElementById('modal-product-alert-toggle');
+    if (alertToggle) alertToggle.checked = !isAlertDisabled;
+    const alertInput = document.getElementById('modal-product-minalert');
+    if (alertInput) {
+      alertInput.value = isAlertDisabled ? '0' : ((product.minAlert !== undefined && product.minAlert !== null) ? product.minAlert : '5');
+      alertInput.disabled = isAlertDisabled;
+      if (isAlertDisabled) {
+        alertInput.classList.add('opacity-50', 'bg-slate-100');
+      } else {
+        alertInput.classList.remove('opacity-50', 'bg-slate-100');
+      }
+    }
 
     const profit = product.salePrice - product.costPrice;
     const margin = product.salePrice > 0 ? ((profit / product.salePrice) * 100).toFixed(1) : '0.0';
@@ -1119,7 +1442,15 @@ const App = {
     const costPrice = Number(document.getElementById('modal-product-cost').value) || 0;
     const salePrice = Number(document.getElementById('modal-product-sale').value) || 0;
     const initialStock = Number(document.getElementById('modal-product-stock').value) || 0;
-    const minAlert = Number(document.getElementById('modal-product-minalert').value) || 5;
+
+    const isAlertEnabled = document.getElementById('modal-product-alert-toggle')?.checked !== false;
+    let minAlert = 5;
+    if (!isAlertEnabled) {
+      minAlert = -1;
+    } else {
+      const minVal = document.getElementById('modal-product-minalert')?.value;
+      minAlert = (minVal !== undefined && minVal !== null && minVal.trim() !== '') ? Number(minVal) : 5;
+    }
 
     if (!productId || !productName) {
       this.showToast('กรุณากรอกรหัสและชื่อสินค้า', 'warning');
@@ -1127,6 +1458,19 @@ const App = {
     }
 
     const isEdit = document.getElementById('modal-product-id').readOnly;
+    if (!isEdit) {
+      const dup = this.products.find(p => p.productId.toLowerCase() === productId.toLowerCase());
+      if (dup) {
+        this.showToast(`รหัสสินค้า "${productId}" ซ้ำกับสินค้า "${dup.productName}" ที่มีอยู่แล้ว! กรุณาเปลี่ยนรหัสใหม่เพื่อป้องกันการบันทึกทับ`, 'error');
+        const warnEl = document.getElementById('modal-product-id-warning');
+        if (warnEl) {
+          warnEl.textContent = `⚠️ รหัสนี้ถูกใช้แล้วโดย: ${dup.productName}`;
+          warnEl.classList.remove('hidden');
+        }
+        return;
+      }
+    }
+
     const existingProduct = isEdit ? this.products.find(p => p.productId.toLowerCase() === productId.toLowerCase()) : null;
     const isStockChanged = existingProduct && existingProduct.currentStock !== initialStock;
 
@@ -1154,6 +1498,30 @@ const App = {
     }
   },
 
+  async muteProductAlert(productId) {
+    const product = this.products.find(p => p.productId === productId);
+    if (!product) return;
+
+    if (!confirm(`ต้องการปิดการแจ้งเตือนสต็อกใกล้หมดสำหรับสินค้า "${product.productName}" ใช่หรือไม่?`)) {
+      return;
+    }
+
+    try {
+      this.showLoading(true);
+      await ApiService.saveProduct({
+        ...product,
+        minAlert: -1,
+        updateStock: false
+      });
+      this.showToast(`🔕 ปิดการแจ้งเตือนสำหรับ "${product.productName}" แล้ว`, 'info');
+      await this.refreshData();
+    } catch (err) {
+      this.showToast('ไม่สามารถปิดการเตือนได้: ' + err.message, 'error');
+    } finally {
+      this.showLoading(false);
+    }
+  },
+
   async confirmDeleteProduct(productId) {
     if (!confirm(`คุณต้องการลบสินค้ารหัส ${productId} ใช่หรือไม่?`)) return;
     try {
@@ -1170,15 +1538,12 @@ const App = {
 
   openQuickTransModal(productId, type) {
     this.switchTab('pos');
-    const select = document.getElementById('pos-product-select');
     const typeSelect = document.getElementById('pos-type-select');
     if (typeSelect && type) {
       typeSelect.value = type;
+      typeSelect.dispatchEvent(new Event('change'));
     }
-    if (select) {
-      select.value = productId;
-      this.updatePosProductInfo(productId);
-    }
+    this.selectPosProduct(productId);
   },
 
   populateCategoryDropdowns() {
@@ -1192,6 +1557,9 @@ const App = {
       posSelect.innerHTML = '<option value="">-- เลือกหรือสแกนสินค้า --</option>' + 
         this.products.map(p => `<option value="${p.productId}">[${p.productId}] ${p.productName} (คงเหลือ: ${p.currentStock} ${p.unit})</option>`).join('');
     }
+
+    this.renderPosCategoryPills();
+    this.renderPosSearchResults();
   },
 
   bindSettings() {
@@ -1545,7 +1913,10 @@ const App = {
     const badge = document.getElementById('connection-status-badge');
     if (!badge) return;
 
-    if (isOnlineMode()) {
+    if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
+      badge.innerHTML = '⚡ Supabase Cloud DB (Ultra-Fast)';
+      badge.className = 'hidden sm:inline-block px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-semibold';
+    } else if (isOnlineMode()) {
       badge.innerHTML = '🟢 เชื่อมต่อ Google Sheets แล้ว';
       badge.className = 'hidden sm:inline-block px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-medium';
     } else {

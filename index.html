@@ -314,17 +314,47 @@
             </div>
           </div>
 
-          <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
-            <div>
-              <label class="block text-xs font-semibold text-slate-600 mb-1">เลือกสินค้า</label>
-              <select id="pos-product-select" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <!-- Fast Product Search & Filter for Stock In / Out -->
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="block text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <span>🔍</span> <span>ค้นหาและเลือกสินค้า</span>
+                </label>
+                <span id="pos-search-count-badge" class="text-[11px] text-slate-400 font-medium">ทั้งหมด 20 รายการ</span>
+              </div>
+
+              <!-- Quick Category Filter Pills -->
+              <div id="pos-category-pills" class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+                <!-- Rendered dynamically by JS -->
+              </div>
+
+              <!-- Search Input with Clear Button -->
+              <div class="relative">
+                <input type="text" id="pos-search-input" placeholder="🔍 พิมพ์ชื่อสินค้า, รหัส TOY-xxx, หรือบาร์โค้ด..." autocomplete="off"
+                  class="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-50/50">
+                <span class="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔍</span>
+                <button type="button" id="pos-search-clear-btn" class="hidden absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-1 text-xs font-bold" title="ล้างการค้นหา">✕</button>
+              </div>
+
+              <!-- Dropdown Search Results List (Fast 1-Click to Select) -->
+              <div id="pos-search-dropdown" class="hidden max-h-64 overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-xl divide-y divide-slate-100 z-30 transition-all">
+                <!-- Rendered dynamically by JS -->
+              </div>
+
+              <!-- Hidden native select kept for full backward compatibility -->
+              <select id="pos-product-select" class="hidden">
               </select>
             </div>
 
             <div id="pos-product-info-card" class="hidden p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-xl space-y-2">
-              <div class="flex justify-between items-center">
-                <span id="pos-info-name" class="font-bold text-indigo-900 text-sm">ชื่อสินค้า</span>
-                <span class="text-xs text-indigo-600">สต็อกคงเหลือ: <b id="pos-info-stock" class="text-indigo-900">0 ชิ้น</b></span>
+              <div class="flex justify-between items-start">
+                <div>
+                  <span id="pos-info-name" class="font-bold text-indigo-900 text-sm block">ชื่อสินค้า</span>
+                  <span class="text-xs text-indigo-600">สต็อกคงเหลือ: <b id="pos-info-stock" class="text-indigo-900">0 ชิ้น</b></span>
+                </div>
+                <button type="button" id="pos-btn-change-product" class="px-2.5 py-1 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold shadow-xs transition flex items-center gap-1">
+                  <span>🔄</span> เปลี่ยนสินค้า
+                </button>
               </div>
               <div class="grid grid-cols-2 gap-2 text-xs">
                 <div class="bg-white p-2 rounded-lg border border-indigo-100 admin-only">
@@ -674,12 +704,33 @@
 
           <!-- Connection Settings -->
           <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
-            <h3 class="font-bold text-slate-800 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
-              <span>🔗</span> การเชื่อมต่อ Google Apps Script Web App
+            <h3 class="font-bold text-slate-800 text-base flex items-center justify-between border-b border-slate-100 pb-3">
+              <span class="flex items-center gap-2"><span>⚡</span> ฐานข้อมูลหลัก Supabase Cloud DB</span>
+              <span class="text-xs px-2.5 py-1 bg-emerald-100 text-emerald-700 font-semibold rounded-full flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> ความเร็วสูง (~150ms)
+              </span>
             </h3>
             
+            <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl space-y-1.5 text-xs text-slate-600">
+              <div class="flex justify-between items-center">
+                <span class="font-semibold text-slate-700">Project URL:</span>
+                <span class="font-mono text-indigo-600">https://wnfphiyumdsiukmdatld.supabase.co</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="font-semibold text-slate-700">Database Engine:</span>
+                <span class="font-semibold text-slate-700">PostgreSQL Cloud (Free Tier)</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="font-semibold text-slate-700">สถานะ:</span>
+                <span class="text-emerald-600 font-semibold">🟢 เชื่อมต่อพร้อมใช้งานแบบ Real-Time</span>
+              </div>
+            </div>
+
+            <h4 class="font-bold text-slate-700 text-xs flex items-center gap-1.5 pt-2">
+              <span>📋</span> ระบบสำรองข้อมูล Google Apps Script (Fallback)
+            </h4>
             <div>
-              <label class="block text-xs font-semibold text-slate-700 mb-1.5">Web App URL</label>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">Web App URL (สำรอง)</label>
               <input type="text" id="settings-api-url" placeholder="https://script.google.com/macros/s/.../exec"
                 class="w-full p-3 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             </div>
@@ -688,8 +739,8 @@
               <button id="btn-save-settings" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-xs transition">
                 💾 บันทึกการตั้งค่า
               </button>
-              <button id="btn-init-sheets" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-xs transition">
-                🚀 กดสร้าง/ซิงค์ตารางใน Google Sheet
+              <button id="btn-init-sheets" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-semibold text-xs transition">
+                🚀 ซิงค์ตารางสำรองใน Google Sheet
               </button>
             </div>
           </div>
@@ -997,6 +1048,7 @@
             <label class="block font-semibold text-slate-600 mb-1">รหัสสินค้า / บาร์โค้ด *</label>
             <input type="text" id="modal-product-id" required
               class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <div id="modal-product-id-warning" class="hidden text-[11px] text-rose-600 font-semibold mt-1">⚠️ รหัสสินค้านี้มีอยู่แล้วในระบบ กรุณาใช้รหัสอื่น</div>
           </div>
           <div>
             <label class="block font-semibold text-slate-600 mb-1">หมวดหมู่</label>
@@ -1034,16 +1086,23 @@
           <span id="modal-profit-preview" class="text-xs font-semibold text-emerald-600">กำไร: ฿0 (0.0%)</span>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-slate-600 mb-1">จำนวนสต็อกเริ่มต้น</label>
             <input type="number" id="modal-product-stock" min="0" value="0"
               class="w-full p-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
           </div>
-          <div>
-            <label class="block font-semibold text-slate-600 mb-1">เตือนเมื่อสต็อก &le;</label>
-            <input type="number" id="modal-product-minalert" min="1" value="5"
+          <div class="space-y-1">
+            <div class="flex items-center justify-between">
+              <label class="font-semibold text-slate-600">เตือนสต็อกใกล้หมด</label>
+              <label class="flex items-center gap-1.5 cursor-pointer text-[11px] text-indigo-600 font-medium">
+                <input type="checkbox" id="modal-product-alert-toggle" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                <span>เปิดแจ้งเตือน</span>
+              </label>
+            </div>
+            <input type="number" id="modal-product-minalert" min="0" value="5" placeholder="5"
               class="w-full p-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <p class="text-[10px] text-slate-400">เตือนเมื่อคงเหลือ &le; ตัวเลขนี้ (ใส่ 0 เพื่อเตือนเมื่อของหมดเกลี้ยง)</p>
           </div>
         </div>
 
