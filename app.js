@@ -1472,12 +1472,10 @@ const App = {
       const submitBtn = document.getElementById('pos-submit-btn');
       if (submitBtn) {
         const originalHtml = submitBtn.innerHTML;
-        submitBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
-        submitBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+        submitBtn.classList.add('btn-success');
         submitBtn.innerHTML = '<span>🎉</span> บันทึกสำเร็จเรียบร้อย!';
         setTimeout(() => {
-          submitBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
-          submitBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+          submitBtn.classList.remove('btn-success');
           submitBtn.innerHTML = originalHtml;
         }, 1200);
       }

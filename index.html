@@ -47,14 +47,14 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Custom Design System CSS -->
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=4.0.1">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
   <!-- ========================================================================= -->
   <!-- TOP NAVIGATION HEADER (GLASSMORPHISM) -->
   <!-- ========================================================================= -->
-  <header class="glass-header text-white sticky top-0 z-30 shadow-md">
+  <header class="bg-slate-900/95 backdrop-blur-md text-white sticky top-0 z-30 shadow-md border-b border-slate-800">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         
@@ -474,7 +474,7 @@
 
             <!-- Type, Qty & Price Inputs -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div>
+              <div class="min-w-0">
                 <label class="block text-xs font-bold text-slate-700 mb-1.5">ประเภทรายการ</label>
                 <select id="pos-type-select" class="w-full h-11 px-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none bg-white">
                   <option value="OUT" selected>📤 เบิก/ขายสินค้า (OUT)</option>
@@ -483,24 +483,24 @@
                 </select>
               </div>
 
-              <div>
+              <div class="min-w-0">
                 <label id="pos-qty-label" class="block text-xs font-bold text-slate-700 mb-1.5">จำนวน (ชิ้น)</label>
                 <div class="flex items-center gap-1.5">
-                  <button type="button" onclick="App.adjustPosQty(-1)" class="pos-stepper-btn w-11 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl border border-slate-200 text-lg shadow-xs" title="ลด 1">−</button>
+                  <button type="button" onclick="App.adjustPosQty(-1)" class="pos-stepper-btn shrink-0 w-11 h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl border border-slate-200 text-lg shadow-xs flex items-center justify-center active:scale-95" title="ลด 1">−</button>
                   <input type="number" id="pos-qty-input" value="1" min="1"
-                    class="flex-1 h-11 p-2 border border-slate-200 rounded-xl text-lg font-extrabold text-center text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none bg-white tabular-nums">
-                  <button type="button" onclick="App.adjustPosQty(1)" class="pos-stepper-btn w-11 h-11 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold rounded-xl border border-indigo-200 text-lg shadow-xs" title="เพิ่ม 1">+</button>
+                    class="min-w-0 flex-1 w-0 h-11 px-2 border border-slate-200 rounded-xl text-lg font-extrabold text-center text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none bg-white tabular-nums">
+                  <button type="button" onclick="App.adjustPosQty(1)" class="pos-stepper-btn shrink-0 w-11 h-11 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold rounded-xl border border-indigo-200 text-lg shadow-xs flex items-center justify-center active:scale-95" title="เพิ่ม 1">+</button>
                 </div>
-                <div class="flex items-center gap-1 mt-1.5">
-                  <button type="button" onclick="App.setPosQty(1)" class="pos-stepper-btn flex-1 py-1 text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">1</button>
-                  <button type="button" onclick="App.setPosQty(2)" class="pos-stepper-btn flex-1 py-1 text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">2</button>
-                  <button type="button" onclick="App.setPosQty(5)" class="pos-stepper-btn flex-1 py-1 text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">+5</button>
-                  <button type="button" onclick="App.setPosQty(10)" class="pos-stepper-btn flex-1 py-1 text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">+10</button>
-                  <button type="button" onclick="App.setPosQty(20)" class="pos-stepper-btn flex-1 py-1 text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">+20</button>
+                <div class="grid grid-cols-5 gap-1 mt-1.5">
+                  <button type="button" onclick="App.setPosQty(1)" class="pos-stepper-btn py-1 text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">1</button>
+                  <button type="button" onclick="App.setPosQty(2)" class="pos-stepper-btn py-1 text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">2</button>
+                  <button type="button" onclick="App.setPosQty(5)" class="pos-stepper-btn py-1 text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">+5</button>
+                  <button type="button" onclick="App.setPosQty(10)" class="pos-stepper-btn py-1 text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">+10</button>
+                  <button type="button" onclick="App.setPosQty(20)" class="pos-stepper-btn py-1 text-[11px] font-bold bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition border border-slate-200/60">+20</button>
                 </div>
               </div>
 
-              <div id="pos-unit-price-container">
+              <div id="pos-unit-price-container" class="min-w-0">
                 <label id="pos-unit-price-label" class="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
                   <span>ราคาขายจริง/ชิ้น (฿)</span>
                   <span class="text-[10px] text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-200/50">แก้ไขได้</span>
@@ -605,7 +605,7 @@
 
           <!-- Big Submit Button Card -->
           <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200/80">
-            <button id="pos-submit-btn" class="w-full py-4 sm:py-5 btn-submit-glow text-white rounded-2xl font-extrabold text-base flex items-center justify-center gap-2.5 tracking-wide active:scale-[0.99] transition-all">
+            <button id="pos-submit-btn" class="w-full py-4 sm:py-5 bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl font-extrabold text-base flex items-center justify-center gap-2.5 tracking-wide active:scale-[0.99] transition-all shadow-lg shadow-indigo-500/25 btn-submit-glow">
               <i data-lucide="check-circle-2" class="w-5 h-5"></i> ยืนยันบันทึกรายการ
             </button>
             <p class="text-xs text-center text-slate-400 mt-2.5 font-medium flex items-center justify-center gap-1">
@@ -1135,7 +1135,7 @@
 
         <div id="login-error-msg" class="hidden p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold"></div>
 
-        <button type="submit" id="btn-submit-login" class="w-full py-4 btn-submit-glow text-white rounded-2xl font-extrabold text-sm shadow-md transition flex items-center justify-center gap-2 active:scale-[0.99]">
+        <button type="submit" id="btn-submit-login" class="w-full py-4 bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl font-extrabold text-sm shadow-lg shadow-indigo-500/25 transition flex items-center justify-center gap-2 active:scale-[0.99] btn-submit-glow">
           <i data-lucide="log-in" class="w-4 h-4"></i> เข้าสู่ระบบ
         </button>
       </form>
