@@ -188,8 +188,8 @@ function renderStockBadgeHtml(p) {
   }
 
   return isLow 
-    ? `<div><span class="px-2.5 py-1 rounded-xl text-xs font-bold bg-rose-100 text-rose-700 inline-flex items-center gap-1">${p.currentStock <= 0 ? '🔴 หมดเกลี้ยง (0)' : `⚠️ ใกล้หมด (${p.currentStock} ${p.unit})`}</span>${alertInfo}</div>`
-    : `<div><span class="px-2.5 py-1 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 inline-flex items-center gap-1">🟢 ${p.currentStock} ${p.unit}</span>${alertInfo}</div>`;
+    ? `<div><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold ${p.currentStock <= 0 ? 'bg-rose-50 text-rose-700 border border-rose-200/60' : 'bg-amber-50 text-amber-800 border border-amber-200/60'}"><span class="w-1.5 h-1.5 rounded-full ${p.currentStock <= 0 ? 'bg-rose-500' : 'bg-amber-500'}"></span>${p.currentStock <= 0 ? 'หมดเกลี้ยง (0)' : `ใกล้หมด (${p.currentStock} ${p.unit})`}</span>${alertInfo}</div>`
+    : `<div><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>${p.currentStock} ${p.unit}</span>${alertInfo}</div>`;
 }
 
 function patchProductRowDOM(product) {
@@ -221,37 +221,47 @@ function prependTransactionRowDOM(tx) {
   const isOut = tx.type === 'OUT';
   const isIn = tx.type === 'IN';
   const typeBadge = isOut 
-    ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">เบิก/ขาย OUT</span>'
+    ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/60"><i data-lucide="arrow-up-right" class="w-3 h-3"></i> เบิก/ขาย OUT</span>'
     : isIn 
-    ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">รับเข้า IN</span>'
-    : '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">ปรับยอด ADJUST</span>';
+    ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60"><i data-lucide="arrow-down-left" class="w-3 h-3"></i> รับเข้า IN</span>'
+    : '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60"><i data-lucide="sliders" class="w-3 h-3"></i> ปรับยอด ADJUST</span>';
 
   const timeStr = new Date(tx.timestamp).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
   const isAdmin = typeof AuthManager !== 'undefined' && AuthManager.isAdmin();
   const profitDisplay = isOut 
     ? `<span class="${tx.profit >= 0 ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-semibold'}">฿${(tx.profit || 0).toLocaleString()}</span>` 
     : '-';
-  const profitCell = isAdmin ? `<td class="px-4 py-3 text-right">${profitDisplay}</td>` : '';
+  const profitCell = isAdmin ? `<td class="px-4 py-3 text-right font-medium">${profitDisplay}</td>` : '';
+
+  const photoButton = tx.imageUrl ? `
+    <button onclick="App.openImageViewerModal('${tx.imageUrl}', '${tx.productName}', '${timeStr}')" 
+      class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition">
+      <i data-lucide="image" class="w-3.5 h-3.5"></i> ดูรูป
+    </button>
+  ` : '<span class="text-slate-300 text-xs">-</span>';
 
   const tr = document.createElement('tr');
   tr.id = `tx-row-${tx.transId}`;
-  tr.className = 'border-b border-slate-100 hover:bg-slate-50 transition text-sm bg-indigo-50/40';
+  tr.className = 'border-b border-slate-100 hover:bg-slate-50/80 transition text-sm bg-indigo-50/40';
   tr.innerHTML = `
     <td class="px-4 py-3 font-mono text-xs text-slate-400">
       <span class="tx-id-badge">${tx.transId}</span>
       ${tx.isOptimistic ? '<span class="ml-1 text-[10px] text-amber-600 font-bold animate-pulse">⏳ ซิงค์...</span>' : ''}
     </td>
-    <td class="px-4 py-3 text-slate-500 whitespace-nowrap">${timeStr}</td>
+    <td class="px-4 py-3 text-slate-500 whitespace-nowrap font-mono text-xs">${timeStr}</td>
     <td class="px-4 py-3">${typeBadge}</td>
     <td class="px-4 py-3 font-medium text-slate-800">${tx.productName} <span class="text-xs text-slate-400 font-mono">(${tx.productId})</span></td>
-    <td class="px-4 py-3 text-right font-medium text-slate-700">${(tx.quantity || 0).toLocaleString()}</td>
-    <td class="px-4 py-3 text-right text-slate-700">${tx.totalRevenue ? '฿' + Number(tx.totalRevenue).toLocaleString() : '-'}</td>
+    <td class="px-4 py-3 text-right font-semibold text-slate-700">${(tx.quantity || 0).toLocaleString()}</td>
+    <td class="px-4 py-3 text-right font-medium text-slate-700">${tx.totalRevenue ? '฿' + Number(tx.totalRevenue).toLocaleString() : '-'}</td>
     ${profitCell}
-    <td class="px-4 py-3 text-center text-slate-300 text-xs">-</td>
+    <td class="px-4 py-3 text-center">${photoButton}</td>
     <td class="px-4 py-3 text-slate-500 text-xs">${tx.operator || 'Staff'} ${tx.note ? `<br><span class="text-slate-400">(${tx.note})</span>` : ''}</td>
   `;
 
   tbody.prepend(tr);
+  if (typeof window !== 'undefined' && window.lucide && typeof window.lucide.createIcons === 'function') {
+    window.lucide.createIcons();
+  }
   setTimeout(() => tr.classList.remove('bg-indigo-50/40'), 1000);
 }
 

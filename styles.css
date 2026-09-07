@@ -1,21 +1,36 @@
-/* Custom Global & Print Styles */
-@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
+/* ========================================================================= */
+/* LEBON TOY STOCK HUB - PREMIUM NEO-RETAIL DESIGN SYSTEM                     */
+/* ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --font-sans: 'Prompt', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-numeric: 'Inter', 'Prompt', -apple-system, sans-serif;
+}
 
 * {
-  font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.tabular-nums {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #F1F5F9;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: #CBD5E1;
-  border-radius: 4px;
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
@@ -30,32 +45,31 @@
   scrollbar-width: none;
 }
 
+/* Lucide Icons Helper */
+svg.lucide {
+  display: inline-block;
+  vertical-align: middle;
+  stroke-width: 2px;
+}
+
 /* QR Scanner Box Overlay */
 #pos-qr-reader {
   border: none !important;
-  border-radius: 1rem;
+  border-radius: 1.25rem;
   overflow: hidden;
 }
 #pos-qr-reader__scan_region {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(0, 0, 0, 0.03);
 }
 #pos-qr-reader__dashboard {
   padding-top: 10px;
 }
 
-/* Animations & Transitions */
-@keyframes pulse-subtle {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-.animate-pulse-subtle {
-  animation: pulse-subtle 2s infinite ease-in-out;
-}
-
-@keyframes fadeInUp {
+/* Smooth Page Transitions */
+@keyframes pageEnter {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -63,36 +77,47 @@
   }
 }
 .tab-page:not(.hidden) {
-  animation: fadeInUp 0.2s ease-out;
+  animation: pageEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Card Hover & Elevation */
-.card-hover {
-  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+/* Glassmorphism Panels */
+.glass-card {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
 }
 
-/* KPI Accent Cards */
-.kpi-card {
+.glass-header {
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Bento Stats Cards */
+.bento-card {
   position: relative;
   overflow: hidden;
   border-radius: 1.25rem;
-  transition: all 0.2s ease;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.kpi-accent-blue {
-  border-left: 4px solid #3B82F6 !important;
+.bento-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
 }
-.kpi-accent-emerald {
-  border-left: 4px solid #10B981 !important;
+
+.bento-blue {
+  background: linear-gradient(145deg, #F0F7FF 0%, #FFFFFF 65%);
 }
-.kpi-accent-indigo {
-  border-left: 4px solid #6366F1 !important;
+.bento-emerald {
+  background: linear-gradient(145deg, #ECFDF5 0%, #FFFFFF 65%);
 }
-.kpi-accent-rose {
-  border-left: 4px solid #F43F5E !important;
+.bento-indigo {
+  background: linear-gradient(145deg, #EEF2FF 0%, #FFFFFF 65%);
+}
+.bento-rose {
+  background: linear-gradient(145deg, #FFF1F2 0%, #FFFFFF 65%);
 }
 
 /* Quick Stepper Buttons for POS */
@@ -101,45 +126,47 @@
   align-items: center;
   justify-content: center;
   user-select: none;
+  -webkit-user-select: none;
   touch-action: manipulation;
-  transition: all 0.12s ease;
+  transition: all 0.12s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .pos-stepper-btn:active {
-  transform: scale(0.94);
+  transform: scale(0.92);
 }
 
 /* Glow Primary Button */
 .btn-submit-glow {
-  box-shadow: 0 4px 18px rgba(79, 70, 229, 0.35);
-  transition: all 0.2s ease;
+  background: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #7C3AED 100%);
+  box-shadow: 0 8px 24px -4px rgba(79, 70, 229, 0.45);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .btn-submit-glow:hover {
-  box-shadow: 0 6px 24px rgba(79, 70, 229, 0.48);
+  box-shadow: 0 12px 30px -4px rgba(79, 70, 229, 0.55);
   transform: translateY(-1px);
 }
 .btn-submit-glow:active {
   transform: scale(0.99);
 }
 
-/* Reason Pills Active State */
+/* Reason Pills */
 .pos-reason-pill {
   transition: all 0.15s ease;
   user-select: none;
   touch-action: manipulation;
 }
 .pos-reason-pill:active {
-  transform: scale(0.96);
+  transform: scale(0.95);
 }
 .pos-reason-pill.active-pill {
-  background-color: #4F46E5 !important;
+  background: #4F46E5 !important;
   color: #FFFFFF !important;
   border-color: #4338CA !important;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3) !important;
 }
 
-/* Mobile Bottom Navigation Bar */
+/* Mobile Bottom Navigation */
 .mobile-bottom-nav {
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.06);
 }
 .mobile-nav-btn {
   touch-action: manipulation;
@@ -153,12 +180,20 @@
   font-weight: 700;
 }
 .mobile-nav-btn.active-mobile-tab .mobile-tab-indicator {
+  opacity: 1 !important;
   transform: scaleX(1);
 }
 
-/* Table Enhancements */
-.lebon-table th {
-  letter-spacing: 0.04em;
+/* Modern Pill Badges */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
 }
 
 /* Print Stylesheet for Reports */

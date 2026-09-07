@@ -42,6 +42,16 @@ const App = {
     await this.refreshData();
     ReportsManager.init();
     this.updateConnectionStatus();
+    this.refreshIcons();
+  },
+
+  /**
+   * รีเฟรชและแปลงไอคอน Lucide SVG อัตโนมัติเมื่อมีการเรนเดอร์เนื้อหาแบบ Dynamic
+   */
+  refreshIcons() {
+    if (typeof window !== 'undefined' && window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons();
+    }
   },
 
   /**
@@ -72,6 +82,7 @@ const App = {
         this.populateCategoryDropdowns();
         this.updateMyAccountInfo();
         AuthManager.checkAuthAndApplyUI();
+        this.refreshIcons();
       }
     } catch (e) {
       console.warn('Cached data render error:', e);
@@ -191,6 +202,7 @@ const App = {
       this.renderUsersTable();
       this.updateMyAccountInfo();
     }
+    this.refreshIcons();
   },
 
   /**
@@ -221,6 +233,7 @@ const App = {
       this.populateCategoryDropdowns();
       this.updateMyAccountInfo();
       AuthManager.checkAuthAndApplyUI();
+      this.refreshIcons();
     } catch (err) {
       this.showToast('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + err.message, 'error');
     } finally {
@@ -255,8 +268,8 @@ const App = {
       const lowList = this.products.filter(p => this.isProductLowStock(p));
       if (lowList.length === 0) {
         lowStockContainer.innerHTML = `
-          <div class="py-6 text-center text-emerald-600 bg-emerald-50 rounded-xl">
-            <span class="text-lg">🎉</span> สต็อกสินค้าทุกรายการอยู่ในเกณฑ์ปกติ (ไม่มีรายการใกล้หมด)
+          <div class="py-8 text-center text-emerald-600 bg-emerald-50/70 border border-emerald-200/60 rounded-xl flex items-center justify-center gap-2 font-medium">
+            <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-500"></i> สต็อกสินค้าทุกรายการอยู่ในเกณฑ์ปกติ (ไม่มีรายการใกล้หมด)
           </div>
         `;
       } else {
@@ -265,19 +278,22 @@ const App = {
           const isZeroAlert = threshold === 0;
           const alertText = isZeroAlert ? 'เตือนเมื่อ: หมด (0 ชิ้น)' : `เตือนเมื่อ &le; ${threshold} ${p.unit}`;
           return `
-          <div class="flex items-center justify-between p-3 rounded-lg bg-amber-50 border border-amber-200">
+          <div class="flex items-center justify-between p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80 hover:bg-amber-50 transition">
             <div>
-              <div class="font-medium text-slate-800">${p.productName}</div>
-              <div class="text-xs text-slate-500 font-mono">รหัส: ${p.productId} | หมวด: ${p.category}</div>
+              <div class="font-bold text-slate-800">${p.productName}</div>
+              <div class="text-xs text-slate-500 font-mono mt-0.5">รหัส: ${p.productId} | หมวด: ${p.category}</div>
             </div>
             <div class="text-right flex items-center gap-2">
               <div>
-                <span class="px-2 py-1 ${p.currentStock <= 0 ? 'bg-rose-200 text-rose-900' : 'bg-amber-200 text-amber-900'} font-bold rounded-lg text-sm">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 ${p.currentStock <= 0 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-amber-100 text-amber-900 border border-amber-200'} font-bold rounded-lg text-xs">
+                  <span class="w-1.5 h-1.5 rounded-full ${p.currentStock <= 0 ? 'bg-rose-500' : 'bg-amber-500'}"></span>
                   ${p.currentStock <= 0 ? 'หมดเกลี้ยง (0)' : `เหลือ ${p.currentStock} ${p.unit}`}
                 </span>
                 <div class="text-xs text-amber-700 mt-1">${alertText}</div>
               </div>
-              <button type="button" onclick="App.muteProductAlert('${p.productId}')" class="px-2 py-1 text-xs bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg transition font-medium" title="ปิดการแจ้งเตือนสำหรับสินค้านี้">🔕 ปิดเตือน</button>
+              <button type="button" onclick="App.muteProductAlert('${p.productId}')" class="px-2.5 py-1.5 text-xs bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg transition font-medium inline-flex items-center gap-1 shadow-2xs" title="ปิดการแจ้งเตือนสำหรับสินค้านี้">
+                <i data-lucide="bell-off" class="w-3.5 h-3.5"></i> ปิดเตือน
+              </button>
             </div>
           </div>
         `;
@@ -291,13 +307,16 @@ const App = {
     if (recentTbody) {
       const recent = this.transactions.slice(0, 5);
       if (recent.length === 0) {
-        recentTbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-slate-400">ยังไม่มีรายการ</td></tr>`;
+        recentTbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-400">ยังไม่มีรายการ</td></tr>`;
       } else {
         recentTbody.innerHTML = recent.map(t => {
           const isOut = t.type === 'OUT';
+          const isIn = t.type === 'IN';
           const typeBadge = isOut 
-            ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">เบิก/ขาย</span>'
-            : '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">รับเข้า</span>';
+            ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/60"><i data-lucide="arrow-up-right" class="w-3 h-3"></i> เบิกขาย</span>'
+            : isIn
+            ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60"><i data-lucide="arrow-down-left" class="w-3 h-3"></i> รับเข้า</span>'
+            : '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60"><i data-lucide="sliders" class="w-3 h-3"></i> ปรับยอด</span>';
           
           const profitCell = isAdmin ? `
             <td class="py-2.5 text-right font-medium ${isOut ? 'text-emerald-600' : 'text-slate-600'}">
@@ -306,21 +325,24 @@ const App = {
           ` : '';
 
           const photoBtn = t.imageUrl ? `
-            <button onclick="App.openImageViewerModal('${t.imageUrl}', '${t.productName}', '${t.type}')" class="ml-1 text-indigo-600 hover:text-indigo-800 text-xs" title="ดูรูปถ่าย">📸</button>
+            <button onclick="App.openImageViewerModal('${t.imageUrl}', '${t.productName}', '${t.type}')" class="ml-1 inline-flex items-center p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition" title="ดูรูปถ่าย">
+              <i data-lucide="image" class="w-3.5 h-3.5"></i>
+            </button>
           ` : '';
 
           return `
-            <tr class="border-b border-slate-100 text-sm">
-              <td class="py-2.5 text-slate-500">${new Date(t.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
+            <tr class="border-b border-slate-100 text-sm hover:bg-slate-50/80 transition">
+              <td class="py-2.5 text-slate-500 font-mono text-xs">${new Date(t.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</td>
               <td class="py-2.5">${typeBadge}</td>
-              <td class="py-2.5 font-medium text-slate-800">${t.productName} ${photoBtn}</td>
-              <td class="py-2.5 text-right">${t.quantity}</td>
+              <td class="py-2.5 font-medium text-slate-800 inline-flex items-center">${t.productName} ${photoBtn}</td>
+              <td class="py-2.5 text-right font-semibold text-slate-700">${t.quantity}</td>
               ${profitCell}
             </tr>
           `;
         }).join('');
       }
     }
+    this.refreshIcons();
   },
 
   bindSearchAndFilter() {
@@ -392,8 +414,8 @@ const App = {
       }
 
       const stockBadge = isLow 
-        ? `<div><span class="px-2.5 py-1 rounded-xl text-xs font-bold bg-rose-100 text-rose-700 inline-flex items-center gap-1">${p.currentStock <= 0 ? '🔴 หมดเกลี้ยง (0)' : `⚠️ ใกล้หมด (${p.currentStock} ${p.unit})`}</span>${alertInfo}</div>`
-        : `<div><span class="px-2.5 py-1 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800 inline-flex items-center gap-1">🟢 ${p.currentStock} ${p.unit}</span>${alertInfo}</div>`;
+        ? `<div><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold ${p.currentStock <= 0 ? 'bg-rose-50 text-rose-700 border border-rose-200/60' : 'bg-amber-50 text-amber-800 border border-amber-200/60'}"><span class="w-1.5 h-1.5 rounded-full ${p.currentStock <= 0 ? 'bg-rose-500' : 'bg-amber-500'}"></span>${p.currentStock <= 0 ? 'หมดเกลี้ยง (0)' : `ใกล้หมด (${p.currentStock} ${p.unit})`}</span>${alertInfo}</div>`
+        : `<div><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>${p.currentStock} ${p.unit}</span>${alertInfo}</div>`;
 
       const profit = (p.salePrice || 0) - (p.costPrice || 0);
       const margin = p.salePrice > 0 ? ((profit / p.salePrice) * 100).toFixed(1) : '0.0';
@@ -402,7 +424,7 @@ const App = {
         : `<div class="text-rose-600 font-semibold">-฿${Math.abs(profit).toLocaleString()} <span class="text-xs text-slate-400 font-normal">(${margin}%)</span></div>`;
 
       const adminCols = isAdmin ? `
-        <td class="px-4 py-3.5 text-right text-slate-600">฿${(p.costPrice || 0).toLocaleString()}</td>
+        <td class="px-4 py-3.5 text-right text-slate-600 font-medium">฿${(p.costPrice || 0).toLocaleString()}</td>
       ` : '';
 
       const profitCol = isAdmin ? `
@@ -410,8 +432,8 @@ const App = {
       ` : '';
 
       const adminButtons = isAdmin ? `
-        <button onclick="App.openEditProductModal('${p.productId}')" class="px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs mr-1 font-semibold transition shadow-2xs" title="แก้ไขสินค้า">✏️</button>
-        <button onclick="App.confirmDeleteProduct('${p.productId}')" class="px-2.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-semibold transition shadow-2xs" title="ลบสินค้า">🗑️</button>
+        <button onclick="App.openEditProductModal('${p.productId}')" class="p-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs mr-1 font-semibold transition shadow-2xs inline-flex items-center" title="แก้ไขสินค้า"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
+        <button onclick="App.confirmDeleteProduct('${p.productId}')" class="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-semibold transition shadow-2xs inline-flex items-center" title="ลบสินค้า"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
       ` : '';
 
       return `
@@ -426,13 +448,14 @@ const App = {
           <td class="px-4 py-3.5 text-right col-profit">${isAdmin ? profitBadge : ''}</td>
           <td class="px-4 py-3.5 text-center col-stock">${stockBadge}</td>
           <td class="px-4 py-3.5 text-center whitespace-nowrap rounded-r-xl">
-            <button onclick="App.openQuickTransModal('${p.productId}', 'OUT')" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs mr-1 font-bold transition shadow-2xs">📤 เบิกขาย</button>
-            <button onclick="App.openQuickTransModal('${p.productId}', 'IN')" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs mr-1 font-bold transition shadow-2xs">📥 รับเข้า</button>
+            <button onclick="App.openQuickTransModal('${p.productId}', 'OUT')" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/60 rounded-xl text-xs mr-1 font-bold transition shadow-2xs"><i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i> เบิกขาย</button>
+            <button onclick="App.openQuickTransModal('${p.productId}', 'IN')" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60 rounded-xl text-xs mr-1 font-bold transition shadow-2xs"><i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i> รับเข้า</button>
             ${adminButtons}
           </td>
         </tr>
       `;
     }).join('');
+    this.refreshIcons();
   },
 
   renderHistory() {
@@ -450,39 +473,40 @@ const App = {
       const isOut = t.type === 'OUT';
       const isIn = t.type === 'IN';
       const typeBadge = isOut 
-        ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">เบิก/ขาย OUT</span>'
+        ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/60"><i data-lucide="arrow-up-right" class="w-3 h-3"></i> เบิก/ขาย OUT</span>'
         : isIn 
-        ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">รับเข้า IN</span>'
-        : '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">ปรับยอด ADJUST</span>';
+        ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60"><i data-lucide="arrow-down-left" class="w-3 h-3"></i> รับเข้า IN</span>'
+        : '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60"><i data-lucide="sliders" class="w-3 h-3"></i> ปรับยอด ADJUST</span>';
 
       const timeStr = new Date(t.timestamp).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
       const profitDisplay = isOut 
         ? `<span class="${t.profit >= 0 ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-semibold'}">฿${(t.profit || 0).toLocaleString()}</span>` 
         : '-';
 
-      const profitCell = isAdmin ? `<td class="px-4 py-3 text-right">${profitDisplay}</td>` : '';
+      const profitCell = isAdmin ? `<td class="px-4 py-3 text-right font-medium">${profitDisplay}</td>` : '';
 
       const photoButton = t.imageUrl ? `
         <button onclick="App.openImageViewerModal('${t.imageUrl}', '${t.productName}', '${timeStr}')" 
-          class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition">
-          <span>📸</span> ดูรูป
+          class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition">
+          <i data-lucide="image" class="w-3.5 h-3.5"></i> ดูรูป
         </button>
       ` : '<span class="text-slate-300 text-xs">-</span>';
 
       return `
-        <tr class="border-b border-slate-100 hover:bg-slate-50 transition text-sm">
+        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition text-sm">
           <td class="px-4 py-3 font-mono text-xs text-slate-400">${t.transId}</td>
-          <td class="px-4 py-3 text-slate-500 whitespace-nowrap">${timeStr}</td>
+          <td class="px-4 py-3 text-slate-500 whitespace-nowrap font-mono text-xs">${timeStr}</td>
           <td class="px-4 py-3">${typeBadge}</td>
           <td class="px-4 py-3 font-medium text-slate-800">${t.productName} <span class="text-xs text-slate-400 font-mono">(${t.productId})</span></td>
-          <td class="px-4 py-3 text-right font-medium text-slate-700">${t.quantity.toLocaleString()}</td>
-          <td class="px-4 py-3 text-right text-slate-700">${t.totalRevenue ? '฿' + t.totalRevenue.toLocaleString() : '-'}</td>
+          <td class="px-4 py-3 text-right font-semibold text-slate-700">${t.quantity.toLocaleString()}</td>
+          <td class="px-4 py-3 text-right font-medium text-slate-700">${t.totalRevenue ? '฿' + t.totalRevenue.toLocaleString() : '-'}</td>
           ${profitCell}
           <td class="px-4 py-3 text-center">${photoButton}</td>
           <td class="px-4 py-3 text-slate-500 text-xs">${t.operator || 'Staff'} ${t.note ? `<br><span class="text-slate-400">(${t.note})</span>` : ''}</td>
         </tr>
       `;
     }).join('');
+    this.refreshIcons();
   },
 
   // =========================================================================
@@ -562,7 +586,7 @@ const App = {
     if (!tbody) return;
 
     if (!this.users || this.users.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-slate-400">ยังไม่มีรายชื่อผู้ใช้งาน</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-slate-400">ยังไม่มีรายชื่อผู้ใช้งาน</td></tr>`;
       return;
     }
 
@@ -574,31 +598,32 @@ const App = {
       const isActive = u.status === 'active';
 
       const roleBadge = isAdminRole
-        ? '<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">🛡️ Admin</span>'
-        : '<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">👤 Staff</span>';
+        ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60"><i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Admin</span>'
+        : '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700"><i data-lucide="user" class="w-3.5 h-3.5"></i> Staff</span>';
 
       const statusBadge = isActive
-        ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">🟢 ปกติ</span>'
-        : '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">🔴 ระงับ</span>';
+        ? '<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> ปกติ</span>'
+        : '<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/60"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> ระงับ</span>';
 
       const deleteBtn = (u.username.toLowerCase() !== 'admin' && !isMe)
-        ? `<button onclick="App.confirmDeleteUser('${u.username}')" class="px-2 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded text-xs">🗑️ ลบ</button>`
+        ? `<button onclick="App.confirmDeleteUser('${u.username}')" class="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-xs inline-flex items-center transition shadow-2xs" title="ลบผู้ใช้"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>`
         : '';
 
       return `
-        <tr class="border-b border-slate-100 hover:bg-slate-50 transition text-sm">
-          <td class="py-3 font-mono font-bold text-slate-800">${u.username} ${isMe ? '<span class="text-xs text-indigo-600 font-sans font-normal">(คุณ)</span>' : ''}</td>
-          <td class="py-3 text-slate-700">${u.fullName}</td>
-          <td class="py-3 text-center">${roleBadge}</td>
-          <td class="py-3 text-center">${statusBadge}</td>
-          <td class="py-3 text-center whitespace-nowrap">
-            <button onclick="App.openEditUserModal('${u.username}')" class="px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded text-xs mr-1">✏️ แก้ไข</button>
-            <button onclick="App.openAdminResetPassModal('${u.username}')" class="px-2.5 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded text-xs mr-1">🔑 รีเซ็ตรหัส</button>
+        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition text-sm">
+          <td class="py-3.5 font-mono font-bold text-slate-800">${u.username} ${isMe ? '<span class="text-xs text-indigo-600 font-sans font-normal">(คุณ)</span>' : ''}</td>
+          <td class="py-3.5 text-slate-700 font-medium">${u.fullName}</td>
+          <td class="py-3.5 text-center">${roleBadge}</td>
+          <td class="py-3.5 text-center">${statusBadge}</td>
+          <td class="py-3.5 text-center whitespace-nowrap">
+            <button onclick="App.openEditUserModal('${u.username}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs mr-1 font-semibold transition shadow-2xs"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i> แก้ไข</button>
+            <button onclick="App.openAdminResetPassModal('${u.username}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs mr-1 font-semibold transition shadow-2xs border border-amber-200/60"><i data-lucide="key" class="w-3.5 h-3.5"></i> รีเซ็ตรหัส</button>
             ${deleteBtn}
           </td>
         </tr>
       `;
     }).join('');
+    this.refreshIcons();
   },
 
   updateMyAccountInfo() {
@@ -1232,9 +1257,9 @@ const App = {
         : 'text-slate-600 font-medium';
       
       const stockBadge = p.currentStock <= 0
-        ? '<span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold">หมด (0)</span>'
+        ? '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200/60 text-[10px] font-bold"><span class="w-1 h-1 rounded-full bg-rose-500"></span>หมด (0)</span>'
         : isLow
-        ? `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">ใกล้หมด</span>`
+        ? `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/60 text-[10px] font-bold"><span class="w-1 h-1 rounded-full bg-amber-500"></span>ใกล้หมด</span>`
         : '';
 
       const isAdmin = AuthManager.isAdmin();
@@ -1244,7 +1269,7 @@ const App = {
 
       return `
         <div onclick="App.selectPosProduct('${p.productId}')"
-          class="p-2.5 hover:bg-indigo-50 cursor-pointer flex items-center justify-between transition group">
+          class="p-2.5 hover:bg-indigo-50/70 cursor-pointer flex items-center justify-between transition group border-b border-slate-100 last:border-0">
           <div class="flex-1 min-w-0 pr-2">
             <div class="flex items-center gap-1.5">
               <span class="font-mono text-xs font-bold text-indigo-600 group-hover:text-indigo-800">${p.productId}</span>
@@ -1252,8 +1277,8 @@ const App = {
               ${stockBadge}
             </div>
             <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-              <span class="px-1.5 py-0.2 bg-slate-100 rounded text-slate-600">${p.category || 'ทั่วไป'}</span>
-              <span>ราคาขาย <b>฿${Number(p.salePrice || 0).toLocaleString()}</b></span>
+              <span class="px-1.5 py-0.2 bg-slate-100 rounded text-slate-600 font-medium">${p.category || 'ทั่วไป'}</span>
+              <span>ราคาขาย <b class="text-slate-700">฿${Number(p.salePrice || 0).toLocaleString()}</b></span>
               ${costBadge}
             </div>
           </div>
@@ -1261,13 +1286,14 @@ const App = {
             <div class="text-xs ${stockColor}">
               ${p.currentStock} ${p.unit || 'ชิ้น'}
             </div>
-            <button type="button" class="mt-0.5 px-2 py-0.5 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white text-indigo-700 rounded text-[10px] font-semibold transition">
+            <button type="button" class="mt-0.5 px-2.5 py-1 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white text-indigo-700 rounded-md text-[10px] font-semibold transition">
               เลือก
             </button>
           </div>
         </div>
       `;
     }).join('');
+    this.refreshIcons();
   },
 
   handleScannedCode(code) {
@@ -1880,17 +1906,17 @@ const App = {
 
     if (badge) {
       if (!navigator.onLine) {
-        badge.innerHTML = '🔴 ออฟไลน์ (บันทึกลงเครื่อง)';
-        badge.className = 'hidden sm:inline-block px-3 py-1 bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-full text-xs font-medium';
+        badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> ออฟไลน์ (บันทึกลงเครื่อง)';
+        badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-rose-500/10 text-rose-300 border border-rose-500/20 rounded-full text-xs font-semibold';
       } else if (count > 0) {
-        badge.innerHTML = `🟡 รอซิงค์ (${count})`;
-        badge.className = 'hidden sm:inline-block px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full text-xs font-medium cursor-pointer';
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> รอซิงค์ (${count})`;
+        badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full text-xs font-semibold cursor-pointer';
       } else if (isOnlineMode()) {
-        badge.innerHTML = '🟢 เชื่อมต่อ Google Sheets แล้ว';
-        badge.className = 'hidden sm:inline-block px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-medium';
+        badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> ซิงค์ Google Sheets';
+        badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 rounded-full text-xs font-semibold';
       } else {
-        badge.innerHTML = '🟡 โหมดทดลอง (Demo)';
-        badge.className = 'hidden sm:inline-block px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full text-xs font-medium';
+        badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> โหมดทดลอง (Demo)';
+        badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full text-xs font-semibold';
       }
     }
   },
@@ -2135,14 +2161,14 @@ const App = {
     if (!badge) return;
 
     if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
-      badge.innerHTML = '⚡ Supabase Cloud DB (Ultra-Fast)';
-      badge.className = 'hidden sm:inline-block px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-semibold';
+      badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Supabase Cloud (Live)';
+      badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-semibold';
     } else if (isOnlineMode()) {
-      badge.innerHTML = '🟢 เชื่อมต่อ Google Sheets แล้ว';
-      badge.className = 'hidden sm:inline-block px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-medium';
+      badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> ซิงค์ Google Sheets';
+      badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-semibold';
     } else {
-      badge.innerHTML = '🟡 โหมดทดลอง (Demo)';
-      badge.className = 'hidden sm:inline-block px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full text-xs font-medium';
+      badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> โหมดทดลอง (Demo)';
+      badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-full text-xs font-semibold';
     }
   },
 
