@@ -492,7 +492,6 @@ const ApiService = {
 
         const rand4 = Math.floor(1000 + Math.random() * 9000);
         const transId = 'TRX-' + Date.now() + '-' + rand4;
-        const imageUrl = transactionData.imageUrl || transactionData.imageBase64 || '';
         const nowIso = new Date().toISOString();
 
         const profitPerUnit = Number((dbSalePrice - newWac).toFixed(2));
@@ -1615,6 +1614,13 @@ const ApiService = {
     return { success: true, message: `ลบสินค้า ${productId} เรียบร้อยแล้ว` };
   }
 };
+
+if (typeof window !== 'undefined') {
+  window.ApiService = ApiService;
+}
+if (typeof globalThis !== 'undefined') {
+  globalThis.ApiService = ApiService;
+}
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {

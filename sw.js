@@ -1,5 +1,5 @@
 /**
- * Lebon Toy Stock Management System - Service Worker v4.0.0 (Hardened Production Release)
+ * Lebon Toy Stock Management System - Service Worker v4.0.1 (Hardened Production Release)
  * Architecture: Strict Separation of Static App Shell and Dynamic REST APIs
  * Remediations:
  *   - Async/Await Promise evaluation in navigation fallback (Fixes offline blank screen)
@@ -8,7 +8,7 @@
  *   - Comprehensive Supabase & Auth API bypass (Network-Only)
  */
 
-const CACHE_NAME = 'lebon-stock-v4.0.0';
+const CACHE_NAME = 'lebon-stock-v4.0.1';
 
 const STATIC_ASSETS = [
   './',
