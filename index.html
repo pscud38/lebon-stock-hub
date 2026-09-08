@@ -1365,6 +1365,22 @@
           </div>
         </div>
 
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block font-bold text-slate-700">หมายเหตุ (ถ้ามี)</label>
+            <span class="text-[10px] text-slate-400">คลิกแท็กด่วนเพื่อระบุอัตโนมัติ</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5 mb-2" id="modal-product-note-pills">
+            <button type="button" onclick="App.setProductModalNote('📦 ล็อตแรก / เปิดร้าน')" class="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 transition">📦 ล็อตเปิดร้าน</button>
+            <button type="button" onclick="App.setProductModalNote('🏬 ซื้อจากสำเพ็ง')" class="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 transition">🏬 ซื้อจากสำเพ็ง</button>
+            <button type="button" onclick="App.setProductModalNote('🚢 นำเข้าจากจีน')" class="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 transition">🚢 นำเข้าจากจีน</button>
+            <button type="button" onclick="App.setProductModalNote('✨ งานแท้ Pop Mart')" class="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 transition">✨ งานแท้</button>
+            <button type="button" onclick="App.setProductModalNote('📍 ตู้โชว์ / ชั้นวาง A1')" class="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-[11px] font-semibold text-slate-600 border border-slate-200 transition">📍 ตู้โชว์ A1</button>
+          </div>
+          <input type="text" id="modal-product-note" placeholder="เช่น แหล่งนำเข้า, รหัสตู้เก็บ, กล่องบุบ, ล็อตเปิดร้าน..."
+            class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+        </div>
+
         <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
           <button type="button" onclick="App.closeProductModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition">ยกเลิก</button>
           <button type="submit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition flex items-center gap-1.5 active:scale-95">
