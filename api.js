@@ -16,7 +16,12 @@ if (typeof globalThis.CONFIG === 'undefined' && typeof require !== 'undefined') 
     if (typeof globalThis.isSupabaseConfigured === 'undefined') {
       globalThis.isSupabaseConfigured = _cfg.isSupabaseConfigured;
     }
-  } catch (e) {}
+  } catch (e) {
+    // Non-fatal: running in browser or bundler environment without Node.js filesystem require
+    if (typeof console !== 'undefined' && console.debug) {
+      console.debug('CJS environment bootstrap skipped in browser mode:', e?.message);
+    }
+  }
 }
 
 /**
@@ -84,8 +89,10 @@ function getCurrentUserRole() {
       const user = AuthManager.getCurrentUser();
       if (user && user.role) return String(user.role).toLowerCase().trim();
     }
-  } catch (e) {}
-  return 'admin';
+  } catch (e) {
+    console.warn('Failed to resolve current user role, defaulting to staff:', e);
+  }
+  return 'staff'; // Fail-closed default (least privilege principle)
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +137,8 @@ function mapProductFromDb(row) {
     currentStock: Number(row.current_stock) || 0,
     minAlert: parseMinAlert(row.min_alert),
     lastUpdated: row.last_updated || new Date().toISOString(),
-    imageUrl: row.image_url || ''
+    imageUrl: row.image_url || '',
+    note: row.note || ''
   };
 }
 
@@ -367,7 +375,75 @@ const ApiService = {
           }
         }
 
-        // ดึงข้อมูลสินค้าล่าสุดจาก Supabase เพื่อคำนวณยอดคงเหลือและ WAC
+        const isSalePriceProvided = (transactionData.salePrice !== undefined && transactionData.salePrice !== null && transactionData.salePrice !== '' && !isNaN(Number(transactionData.salePrice)) && Number(transactionData.salePrice) >= 0);
+        const inCostParam = (transactionData.costPrice !== undefined && transactionData.costPrice !== null && transactionData.costPrice !== '') ? Math.max(0, Number(transactionData.costPrice)) : null;
+        const effectivePrice = isSalePriceProvided ? Number(transactionData.salePrice) : (type === 'IN' ? inCostParam : null);
+        const imageUrl = transactionData.imageUrl || transactionData.imageBase64 || '';
+
+        // 1. เรียกใช้ Stored Procedure: execute_stock_transaction (Atomic 100% พร้อม Row-level Lock)
+        try {
+          const rpcRes = await fetch(`${url}/rest/v1/rpc/execute_stock_transaction`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+              p_product_id: productId,
+              p_type: type,
+              p_quantity: qty,
+              p_price: effectivePrice,
+              p_operator: transactionData.operator || 'Staff',
+              p_note: transactionData.note || '',
+              p_image_url: imageUrl
+            })
+          });
+
+          if (rpcRes.ok) {
+            const rpcJson = await rpcRes.json();
+            if (rpcJson && rpcJson.success) {
+              const newStock = Number(rpcJson.newStock);
+              const transId = rpcJson.transId;
+              const profit = Number(rpcJson.profit) || 0;
+
+              // อัปเดต LocalStorage แคชคู่ขนาน
+              this.addLocalTransaction({ role, ...transactionData, transId, newStock });
+
+              const roleClean = (role || '').toLowerCase().trim();
+              const isExplicitStaff = (roleClean === 'staff' || (roleClean && roleClean !== 'admin'));
+
+              const result = {
+                success: true,
+                message: `บันทึกรายการ ${type} สำเร็จ! สต็อกคงเหลือ: ${newStock}`,
+                transId: transId,
+                newStock: newStock,
+                imageUrl: imageUrl
+              };
+
+              if (!isExplicitStaff) {
+                result.profit = profit;
+                result.newCost = Number(rpcJson.newCost) || 0;
+              }
+
+              return result;
+            }
+          } else {
+            const errTxt = await rpcRes.text();
+            if (errTxt.includes('สต็อกไม่พอ') || errTxt.includes('ไม่พบสินค้า') || errTxt.includes('P0001')) {
+              let cleanMsg = errTxt;
+              try {
+                const parsed = JSON.parse(errTxt);
+                if (parsed.message) cleanMsg = parsed.message;
+              } catch (_) {}
+              throw new Error(cleanMsg);
+            }
+            console.warn('RPC execute_stock_transaction unavailable, proceeding to direct query fallback:', errTxt);
+          }
+        } catch (rpcErr) {
+          if (rpcErr.message && (rpcErr.message.includes('สต็อกไม่พอ') || rpcErr.message.includes('ไม่พบสินค้า'))) {
+            throw rpcErr;
+          }
+          console.warn('RPC execution exception, falling back to direct query:', rpcErr);
+        }
+
+        // 2. Direct Query Fallback (กรณีฐานข้อมูลยังไม่ได้ลง Patch RPC)
         const prodRes = await fetch(`${url}/rest/v1/products?product_id=eq.${encodeURIComponent(productId)}&select=*`, { headers });
         if (!prodRes.ok) throw new Error('ไม่สามารถดึงข้อมูลสินค้าจากฐานข้อมูลได้');
         const prods = await prodRes.json();
@@ -377,8 +453,6 @@ const ApiService = {
         let newStock = Number(dbProduct.current_stock) || 0;
         const oldCost = Number(dbProduct.cost_price) || 0;
         const dbSalePrice = Number(dbProduct.sale_price) || 0;
-
-        const isSalePriceProvided = (transactionData.salePrice !== undefined && transactionData.salePrice !== null && transactionData.salePrice !== '' && !isNaN(Number(transactionData.salePrice)) && Number(transactionData.salePrice) >= 0);
         const salePrice = isSalePriceProvided ? Number(transactionData.salePrice) : dbSalePrice;
 
         let costPrice = oldCost;
@@ -388,8 +462,8 @@ const ApiService = {
         let newWac = oldCost;
 
         if (type === 'IN') {
-          const inCost = (transactionData.costPrice !== undefined && transactionData.costPrice !== null && transactionData.costPrice !== '') ? Number(transactionData.costPrice) : 0;
-          const actualInCost = inCost > 0 ? inCost : oldCost;
+          const inCost = (transactionData.costPrice !== undefined && transactionData.costPrice !== null && transactionData.costPrice !== '') ? Math.max(0, Number(transactionData.costPrice)) : oldCost;
+          const actualInCost = inCost;
           newWac = calculateWAC(newStock, oldCost, qty, inCost);
 
           newStock += qty;
@@ -579,17 +653,47 @@ const ApiService = {
         const transInserts = [];
         const productUpdates = [];
 
+        // Pre-validation: ตรวจสอบความถูกต้องของทุกรายการในบิลก่อนลงมือทำรายการจริง (Strict Validation)
+        const missingProducts = [];
+        const invalidQuantities = [];
+        const insufficientStock = [];
+
         items.forEach((item, idx) => {
           const pId = String(item.productId || '').trim().toLowerCase();
           const dbProduct = prodMap.get(pId);
-          if (!dbProduct) return;
-
           const qty = Number(item.quantity) || 0;
-          if (qty <= 0) return;
+          const lineNum = idx + 1;
+
+          if (!dbProduct) {
+            missingProducts.push(`รายการที่ ${lineNum} (รหัส: ${item.productId || 'ไม่ระบุ'})`);
+          } else if (qty <= 0) {
+            invalidQuantities.push(`รายการที่ ${lineNum} (${dbProduct.product_name})`);
+          } else if (String(item.type || 'IN').toUpperCase() === 'OUT') {
+            const curStock = Number(dbProduct.current_stock) || 0;
+            if (curStock < qty) {
+              insufficientStock.push(`${dbProduct.product_name} (คงเหลือ ${curStock} ${dbProduct.unit || 'ชิ้น'}, ต้องการตัด ${qty})`);
+            }
+          }
+        });
+
+        if (missingProducts.length > 0) {
+          throw new Error('ไม่สามารถบันทึกบิลได้: ไม่พบสินค้าในระบบ: ' + missingProducts.join(', '));
+        }
+        if (invalidQuantities.length > 0) {
+          throw new Error('จำนวนสินค้าต้องมากกว่า 0: ' + invalidQuantities.join(', '));
+        }
+        if (insufficientStock.length > 0) {
+          throw new Error('สต็อกไม่เพียงพอสำหรับการเบิกขาย: ' + insufficientStock.join(', '));
+        }
+
+        items.forEach((item, idx) => {
+          const pId = String(item.productId || '').trim().toLowerCase();
+          const dbProduct = prodMap.get(pId);
+          const qty = Number(item.quantity) || 0;
 
           const type = String(item.type || 'IN').toUpperCase();
           const oldCost = Number(dbProduct.cost_price) || 0;
-          const inCost = (item.costPrice !== undefined && item.costPrice !== null && item.costPrice !== '') ? Number(item.costPrice) : oldCost;
+          const inCost = (item.costPrice !== undefined && item.costPrice !== null && item.costPrice !== '') ? Math.max(0, Number(item.costPrice)) : oldCost;
           const itemSalePrice = (item.salePrice !== undefined && item.salePrice !== null && item.salePrice !== '') ? Number(item.salePrice) : (Number(dbProduct.sale_price) || 0);
           const transId = `${batchId}-${idx + 1}`;
 
@@ -606,7 +710,10 @@ const ApiService = {
             costPrice = inCost;
             totalCost = qty * inCost;
           } else if (type === 'OUT') {
-            newStock = Math.max(0, newStock - qty);
+            if (newStock < qty) {
+              throw new Error(`สต็อกสินค้า "${dbProduct.product_name}" ไม่พอตัด (คงเหลือ ${newStock}, ต้องการตัด ${qty})`);
+            }
+            newStock -= qty;
             totalCost = qty * oldCost;
             totalRevenue = qty * itemSalePrice;
             profit = totalRevenue - totalCost;
@@ -751,11 +858,15 @@ const ApiService = {
           last_updated: new Date().toISOString()
         };
 
+        if (productData.note) {
+          payload.note = productData.note;
+        }
+
         if (productData.updateStock || productData.initialStock !== undefined) {
           payload.current_stock = Number(productData.initialStock) || 0;
         }
 
-        const res = await fetch(`${url}/rest/v1/products`, {
+        let res = await fetch(`${url}/rest/v1/products`, {
           method: 'POST',
           headers: headers,
           body: JSON.stringify(payload)
@@ -763,7 +874,48 @@ const ApiService = {
 
         if (!res.ok) {
           const errTxt = await res.text();
-          throw new Error('Supabase saveProduct failed: ' + errTxt);
+          // ถ้าตาราง products ยังไม่มีคอลัมน์ note ให้ตัดออกแล้วลองใหม่ ป้องกัน Error 42703
+          if (errTxt.includes('note') && (errTxt.includes('does not exist') || errTxt.includes('42703'))) {
+            delete payload.note;
+            res = await fetch(`${url}/rest/v1/products`, {
+              method: 'POST',
+              headers: headers,
+              body: JSON.stringify(payload)
+            });
+          }
+          if (!res.ok) {
+            throw new Error('Supabase saveProduct failed: ' + (await res.text()));
+          }
+        }
+
+        // หากเป็นสินค้าใหม่ และมีสต็อกเริ่มต้น > 0 ให้บันทึก Transaction รับเข้ารองรับการ Audit ย้อนหลัง
+        if (!productData.isEdit && Number(productData.initialStock) > 0) {
+          try {
+            const initQty = Number(productData.initialStock);
+            const initTransPayload = {
+              trans_id: 'TRX-' + Date.now() + '-' + Math.floor(Math.random() * 10000),
+              timestamp: new Date().toISOString(),
+              product_id: productId,
+              product_name: productData.productName,
+              type: 'IN',
+              quantity: initQty,
+              cost_price: cost,
+              sale_price: sale,
+              total_cost: cost * initQty,
+              total_revenue: 0,
+              profit: 0,
+              operator: (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUser()?.fullName) || 'Admin',
+              note: productData.note ? `[สต็อกเริ่มต้น] ${productData.note}` : 'เพิ่มสินค้าใหม่พร้อมสต็อกเริ่มต้น',
+              image_url: ''
+            };
+            await fetch(`${url}/rest/v1/transactions`, {
+              method: 'POST',
+              headers: headers,
+              body: JSON.stringify(initTransPayload)
+            });
+          } catch (initErr) {
+            console.warn('Initial transaction recording error (non-fatal):', initErr);
+          }
         }
 
         if (category) {
@@ -1430,6 +1582,7 @@ const ApiService = {
         profitPerUnit: profit,
         marginPercent: margin,
         minAlert: parseMinAlert(data.minAlert),
+        note: data.note !== undefined ? data.note : (products[index].note || ''),
         currentStock: data.updateStock ? Number(data.initialStock) : products[index].currentStock,
         lastUpdated: new Date().toISOString()
       };
@@ -1445,6 +1598,7 @@ const ApiService = {
         marginPercent: margin,
         currentStock: Number(data.initialStock) || 0,
         minAlert: parseMinAlert(data.minAlert),
+        note: data.note || '',
         lastUpdated: new Date().toISOString()
       };
       products.push(newProd);

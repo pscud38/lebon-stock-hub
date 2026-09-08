@@ -11,6 +11,7 @@ const AuthManager = {
       const stored = localStorage.getItem(this.STORAGE_KEY);
       return stored ? JSON.parse(stored) : null;
     } catch (e) {
+      console.warn('Failed to parse current user from localStorage:', e);
       return null;
     }
   },
@@ -25,7 +26,7 @@ const AuthManager = {
   },
 
   /**
-   * ล็อกอินเข้าสู่ระบบ
+   * ล็อกอินเข้าสู่ระบบ (Server-Side Authentication via Supabase RPC)
    */
   async login(username, password) {
     const u = username.trim();
@@ -43,24 +44,46 @@ const AuthManager = {
           'Authorization': 'Bearer ' + key,
           'Content-Type': 'application/json'
         };
-        const response = await fetch(`${url}/rest/v1/users?username=eq.${encodeURIComponent(u)}&select=*`, { headers });
-        if (response.ok) {
-          const users = await response.json();
-          if (users.length > 0) {
-            const dbUser = users[0];
-            if (dbUser.password === p) {
-              if (dbUser.status === 'inactive') {
-                const authErr = new Error('บัญชีผู้ใช้นี้ถูกระงับการใช้งาน');
-                authErr.isAuthRejection = true;
-                throw authErr;
+
+        // 1. เรียกใช้ Server-side RPC login_user อย่างปลอดภัย
+        const rpcRes = await fetch(`${url}/rest/v1/rpc/login_user`, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ p_username: u, p_password: p })
+        });
+
+        if (rpcRes.ok) {
+          const result = await rpcRes.json();
+          if (result && result.success && result.user) {
+            this.setCurrentUser(result.user);
+            return result.user;
+          } else {
+            const authErr = new Error(result?.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+            authErr.isAuthRejection = true;
+            throw authErr;
+          }
+        } else {
+          // หากยังไม่ได้รัน patch (ฟังก์ชัน login_user ยังไม่ถูกสร้าง) ให้ fallback ชั่วคราว
+          const errTxt = await rpcRes.text();
+          if (errTxt.includes('login_user') && (errTxt.includes('does not exist') || errTxt.includes('404'))) {
+            console.warn('RPC login_user not found on database, attempting direct lookup fallback...');
+            const response = await fetch(`${url}/rest/v1/users?username=eq.${encodeURIComponent(u)}&select=*`, { headers });
+            if (response.ok) {
+              const users = await response.json();
+              if (users.length > 0 && users[0].password === p) {
+                if (users[0].status === 'inactive') {
+                  const authErr = new Error('บัญชีผู้ใช้นี้ถูกระงับการใช้งาน');
+                  authErr.isAuthRejection = true;
+                  throw authErr;
+                }
+                const userObj = {
+                  username: users[0].username,
+                  fullName: users[0].full_name || users[0].username,
+                  role: users[0].role || 'staff'
+                };
+                this.setCurrentUser(userObj);
+                return userObj;
               }
-              const userObj = {
-                username: dbUser.username,
-                fullName: dbUser.full_name || dbUser.username,
-                role: dbUser.role || 'staff'
-              };
-              this.setCurrentUser(userObj);
-              return userObj;
             }
           }
           const authErr = new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
@@ -69,7 +92,7 @@ const AuthManager = {
         }
       } catch (err) {
         if (err && err.isAuthRejection) throw err;
-        console.warn('Supabase login error, checking fallback:', err);
+        console.warn('Supabase login communication error:', err);
       }
     }
 
@@ -98,23 +121,12 @@ const AuthManager = {
         if (err && err.isAuthRejection) {
           throw err;
         }
-        // เฉพาะกรณีเกิดปัญหาเครือข่าย/ออฟไลน์ จึงจะอนุญาตให้ใช้ Local Fallback
-        console.warn('API login network failure, checking fallback credentials:', err);
+        console.warn('API login network failure:', err);
       }
     }
 
-    // Default Fallback Accounts
-    if (u === 'admin' && p === 'admin1234') {
-      const user = { username: 'admin', fullName: 'ผู้ดูแลระบบ (Admin)', role: 'admin' };
-      this.setCurrentUser(user);
-      return user;
-    } else if (u === 'staff' && p === 'staff1234') {
-      const user = { username: 'staff', fullName: 'พนักงานหน้าร้าน (Staff)', role: 'staff' };
-      this.setCurrentUser(user);
-      return user;
-    }
-
-    throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+    // Fail-closed: ไม่อนุญาตให้ล็อกอินหากไม่มีการยืนยันตัวตนจากฐานข้อมูล (ลบ Backdoor credentials ออก 100%)
+    throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือไม่สามารถเชื่อมต่อฐานข้อมูลยืนยันตัวตนได้');
   },
 
   setCurrentUser(user) {
