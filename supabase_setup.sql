@@ -75,8 +75,9 @@ INSERT INTO categories (name) VALUES ('โมเดล & ฟิกเกอร�
 INSERT INTO categories (name) VALUES ('อื่นๆ') ON CONFLICT (name) DO NOTHING;
 
 -- 5. Insert Users
-INSERT INTO users (username, password, full_name, role, status, created_at) VALUES ('admin', 'admin1234', 'เจ้าของร้าน (Admin)', 'admin', 'active', '2026-09-01 02:09:24') ON CONFLICT (username) DO NOTHING;
-INSERT INTO users (username, password, full_name, role, status, created_at) VALUES ('teppok', 'staff1234', 'พันพิชิต ศิลา', 'admin', 'active', '2026-09-02 09:43:10') ON CONFLICT (username) DO NOTHING;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+INSERT INTO users (username, password, full_name, role, status, created_at) VALUES ('admin', crypt('admin1234', gen_salt('bf', 10)), 'เจ้าของร้าน (Admin)', 'admin', 'active', '2026-09-01 02:09:24') ON CONFLICT (username) DO NOTHING;
+INSERT INTO users (username, password, full_name, role, status, created_at) VALUES ('teppok', crypt('staff1234', gen_salt('bf', 10)), 'พันพิชิต ศิลา', 'admin', 'active', '2026-09-02 09:43:10') ON CONFLICT (username) DO NOTHING;
 
 -- 6. Insert Products (20 items)
 INSERT INTO products (product_id, product_name, category, unit, cost_price, sale_price, profit_per_unit, margin_percent, current_stock, min_alert, last_updated) VALUES ('TOY-002', 'Hachimi บังใหญ่ชม', 'Squishy / นุ่มนิ่ม', 'ชิ้น', 186, 390, 204, 52.31, 40, 5, '2026-09-02 09:50:02') ON CONFLICT (product_id) DO UPDATE SET current_stock=EXCLUDED.current_stock, cost_price=EXCLUDED.cost_price, sale_price=EXCLUDED.sale_price;
@@ -345,11 +346,6 @@ BEGIN
 
     IF v_user.password = crypt(p_password, v_user.password) THEN
         v_is_valid := true;
-    ELSIF v_user.password = p_password THEN
-        v_is_valid := true;
-        UPDATE users
-        SET password = crypt(p_password, gen_salt('bf', 10))
-        WHERE username = v_user.username;
     END IF;
 
     IF v_is_valid THEN
@@ -367,9 +363,123 @@ BEGIN
 END;
 $func$;
 
--- 11. สิทธิ์การเข้าถึงสำหรับ anon และ authenticated
+-- 11. ฟังก์ชันเปลี่ยนรหัสผ่านแบบปลอดภัย (Bcrypt Hash & Security Definer)
+CREATE OR REPLACE FUNCTION change_password(
+    p_username TEXT,
+    p_new_password TEXT,
+    p_old_password TEXT DEFAULT '',
+    p_is_admin_reset BOOLEAN DEFAULT false
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $func$
+DECLARE
+    v_user RECORD;
+    v_is_valid BOOLEAN := false;
+BEGIN
+    SELECT username, password, status
+    INTO v_user
+    FROM users
+    WHERE LOWER(username) = LOWER(TRIM(p_username));
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'ไม่พบชื่อผู้ใช้ ' || p_username);
+    END IF;
+
+    IF LENGTH(TRIM(p_new_password)) < 4 THEN
+        RETURN jsonb_build_object('success', false, 'message', 'รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร');
+    END IF;
+
+    IF NOT p_is_admin_reset THEN
+        IF p_old_password IS NULL OR TRIM(p_old_password) = '' THEN
+            RETURN jsonb_build_object('success', false, 'message', 'กรุณาระบุรหัสผ่านเดิม');
+        END IF;
+
+        IF v_user.password = crypt(p_old_password, v_user.password) OR v_user.password = p_old_password THEN
+            v_is_valid := true;
+        ELSE
+            RETURN jsonb_build_object('success', false, 'message', 'รหัสผ่านเดิมไม่ถูกต้อง');
+        END IF;
+    ELSE
+        v_is_valid := true;
+    END IF;
+
+    UPDATE users
+    SET password = crypt(TRIM(p_new_password), gen_salt('bf', 10))
+    WHERE username = v_user.username;
+
+    RETURN jsonb_build_object('success', true, 'message', 'เปลี่ยนรหัสผ่านสำหรับ ' || p_username || ' สำเร็จเรียบร้อย');
+END;
+$func$;
+
+-- 12. ฟังก์ชันจัดการผู้ใช้งานโดย Admin (Security Definer)
+CREATE OR REPLACE FUNCTION admin_save_user(
+    p_username TEXT,
+    p_full_name TEXT,
+    p_role TEXT,
+    p_status TEXT,
+    p_password TEXT DEFAULT ''
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $func$
+DECLARE
+    v_clean_username TEXT := LOWER(TRIM(p_username));
+BEGIN
+    IF v_clean_username = '' THEN
+        RETURN jsonb_build_object('success', false, 'message', 'กรุณาระบุชื่อผู้ใช้');
+    END IF;
+
+    IF p_password IS NOT NULL AND TRIM(p_password) <> '' THEN
+        INSERT INTO users (username, full_name, role, status, password, created_at)
+        VALUES (v_clean_username, COALESCE(p_full_name, v_clean_username), COALESCE(p_role, 'staff'), COALESCE(p_status, 'active'), crypt(TRIM(p_password), gen_salt('bf', 10)), NOW())
+        ON CONFLICT (username) DO UPDATE
+        SET full_name = EXCLUDED.full_name,
+            role = EXCLUDED.role,
+            status = EXCLUDED.status,
+            password = EXCLUDED.password;
+    ELSE
+        INSERT INTO users (username, full_name, role, status, password, created_at)
+        VALUES (v_clean_username, COALESCE(p_full_name, v_clean_username), COALESCE(p_role, 'staff'), COALESCE(p_status, 'active'), crypt('1234', gen_salt('bf', 10)), NOW())
+        ON CONFLICT (username) DO UPDATE
+        SET full_name = EXCLUDED.full_name,
+            role = EXCLUDED.role,
+            status = EXCLUDED.status;
+    END IF;
+
+    RETURN jsonb_build_object('success', true, 'message', 'บันทึกข้อมูลผู้ใช้ ' || v_clean_username || ' สำเร็จ');
+END;
+$func$;
+
+CREATE OR REPLACE FUNCTION admin_delete_user(p_username TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $func$
+BEGIN
+    IF LOWER(TRIM(p_username)) = 'admin' THEN
+        RETURN jsonb_build_object('success', false, 'message', 'ไม่อนุญาตให้ลบบัญชีผู้ดูแลระบบหลัก (admin)');
+    END IF;
+
+    DELETE FROM users WHERE LOWER(username) = LOWER(TRIM(p_username));
+    RETURN jsonb_build_object('success', true, 'message', 'ลบผู้ใช้ ' || p_username || ' สำเร็จ');
+END;
+$func$;
+
+-- 13. มุมมองข้อมูลผู้ใช้แบบปลอดภัย (ไม่ส่งคอลัมน์รหัสผ่านออกมา)
+CREATE OR REPLACE VIEW safe_users AS
+SELECT username, full_name, role, status, created_at
+FROM users;
+
+-- 14. สิทธิ์การเข้าถึงสำหรับ anon และ authenticated
 GRANT SELECT ON staff_products TO anon, authenticated;
+GRANT SELECT ON safe_users TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION get_next_product_id() TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION mute_product_alert(TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION execute_stock_transaction(TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION login_user(TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION change_password(TEXT, TEXT, TEXT, BOOLEAN) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION admin_save_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION admin_delete_user(TEXT) TO anon, authenticated;

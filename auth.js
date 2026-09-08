@@ -63,29 +63,6 @@ const AuthManager = {
             throw authErr;
           }
         } else {
-          // หากยังไม่ได้รัน patch (ฟังก์ชัน login_user ยังไม่ถูกสร้าง) ให้ fallback ชั่วคราว
-          const errTxt = await rpcRes.text();
-          if (errTxt.includes('login_user') && (errTxt.includes('does not exist') || errTxt.includes('404'))) {
-            console.warn('RPC login_user not found on database, attempting direct lookup fallback...');
-            const response = await fetch(`${url}/rest/v1/users?username=eq.${encodeURIComponent(u)}&select=*`, { headers });
-            if (response.ok) {
-              const users = await response.json();
-              if (users.length > 0 && users[0].password === p) {
-                if (users[0].status === 'inactive') {
-                  const authErr = new Error('บัญชีผู้ใช้นี้ถูกระงับการใช้งาน');
-                  authErr.isAuthRejection = true;
-                  throw authErr;
-                }
-                const userObj = {
-                  username: users[0].username,
-                  fullName: users[0].full_name || users[0].username,
-                  role: users[0].role || 'staff'
-                };
-                this.setCurrentUser(userObj);
-                return userObj;
-              }
-            }
-          }
           const authErr = new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
           authErr.isAuthRejection = true;
           throw authErr;

@@ -190,7 +190,8 @@ const ApiService = {
           fetch(`${url}/rest/v1/products?select=*&order=product_id.asc`, { headers, cache: 'no-store' }),
           fetch(`${url}/rest/v1/transactions?select=*&order=timestamp.desc&limit=150`, { headers, cache: 'no-store' }),
           fetch(`${url}/rest/v1/categories?select=*&order=name.asc`, { headers, cache: 'no-store' }),
-          fetch(`${url}/rest/v1/users?select=username,full_name,role,status,created_at&order=username.asc`, { headers, cache: 'no-store' })
+          fetch(`${url}/rest/v1/safe_users?select=*&order=username.asc`, { headers, cache: 'no-store' })
+            .then(r => r.ok ? r : fetch(`${url}/rest/v1/users?select=username,full_name,role,status,created_at&order=username.asc`, { headers, cache: 'no-store' }))
         ]);
 
         if (prodRes.ok && transRes.ok) {
@@ -1047,10 +1048,34 @@ const ApiService = {
     if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
       try {
         const { url } = getSupabaseConfig();
-        const headers = getSupabaseHeaders({
-          'Prefer': 'resolution=merge-duplicates'
-        });
+        const headers = getSupabaseHeaders();
 
+        // 1. เรียกใช้ Stored Procedure: admin_save_user (Security Definer + Bcrypt)
+        try {
+          const rpcRes = await fetch(`${url}/rest/v1/rpc/admin_save_user`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+              p_username: userData.username.trim(),
+              p_full_name: userData.fullName || userData.username,
+              p_role: userData.role || 'staff',
+              p_status: userData.status || 'active',
+              p_password: userData.password ? userData.password.trim() : ''
+            })
+          });
+
+          if (rpcRes.ok) {
+            const rpcJson = await rpcRes.json();
+            if (rpcJson && rpcJson.success) {
+              return { success: true, message: rpcJson.message || `บันทึกข้อมูลผู้ใช้ ${userData.username} สำเร็จ` };
+            }
+            throw new Error(rpcJson?.message || 'บันทึกข้อมูลผู้ใช้ไม่สำเร็จ');
+          }
+        } catch (rpcErr) {
+          if (rpcErr.message && !rpcErr.message.includes('404')) throw rpcErr;
+        }
+
+        // Direct table fallback
         const payload = {
           username: userData.username.trim(),
           full_name: userData.fullName || userData.username,
@@ -1063,7 +1088,7 @@ const ApiService = {
 
         const res = await fetch(`${url}/rest/v1/users`, {
           method: 'POST',
-          headers: headers,
+          headers: getSupabaseHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
           body: JSON.stringify(payload)
         });
 
@@ -1123,6 +1148,27 @@ const ApiService = {
         const { url } = getSupabaseConfig();
         const headers = getSupabaseHeaders();
 
+        // 1. เรียกใช้ Stored Procedure: admin_delete_user
+        try {
+          const rpcRes = await fetch(`${url}/rest/v1/rpc/admin_delete_user`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+              p_username: username
+            })
+          });
+
+          if (rpcRes.ok) {
+            const rpcJson = await rpcRes.json();
+            if (rpcJson && rpcJson.success) {
+              return { success: true, message: rpcJson.message || `ลบผู้ใช้ ${username} สำเร็จ` };
+            }
+            throw new Error(rpcJson?.message || 'ลบผู้ใช้ไม่สำเร็จ');
+          }
+        } catch (rpcErr) {
+          if (rpcErr.message && !rpcErr.message.includes('404')) throw rpcErr;
+        }
+
         const res = await fetch(`${url}/rest/v1/users?username=eq.${encodeURIComponent(username)}`, {
           method: 'DELETE',
           headers: headers
@@ -1175,6 +1221,39 @@ const ApiService = {
         const { url } = getSupabaseConfig();
         const headers = getSupabaseHeaders();
 
+        // 1. เรียกใช้ Stored Procedure: change_password (Server-Side Verification & Bcrypt Hashing)
+        try {
+          const rpcRes = await fetch(`${url}/rest/v1/rpc/change_password`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+              p_username: data.username,
+              p_new_password: data.newPassword,
+              p_old_password: data.oldPassword || '',
+              p_is_admin_reset: !!data.isAdminReset
+            })
+          });
+
+          if (rpcRes.ok) {
+            const rpcJson = await rpcRes.json();
+            if (rpcJson && rpcJson.success) {
+              return { success: true, message: rpcJson.message || `เปลี่ยนรหัสผ่านสำหรับ ${data.username} สำเร็จ!` };
+            }
+            throw new Error(rpcJson?.message || 'เปลี่ยนรหัสผ่านไม่สำเร็จ');
+          } else {
+            const errTxt = await rpcRes.text();
+            let cleanMsg = errTxt;
+            try {
+              const parsed = JSON.parse(errTxt);
+              if (parsed.message) cleanMsg = parsed.message;
+            } catch (_) {}
+            throw new Error(cleanMsg);
+          }
+        } catch (rpcErr) {
+          if (rpcErr.message && !rpcErr.message.includes('404')) throw rpcErr;
+        }
+
+        // Direct table fallback
         if (data.oldPassword) {
           const checkRes = await fetch(`${url}/rest/v1/users?username=eq.${encodeURIComponent(data.username)}&select=*`, { headers });
           if (checkRes.ok) {
