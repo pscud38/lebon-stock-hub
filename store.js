@@ -231,7 +231,13 @@ function prependTransactionRowDOM(tx) {
   const profitDisplay = isOut 
     ? `<span class="${tx.profit >= 0 ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-semibold'}">฿${(tx.profit || 0).toLocaleString()}</span>` 
     : '-';
-  const profitCell = isAdmin ? `<td class="px-4 py-3 text-right font-medium">${profitDisplay}</td>` : '';
+  const profitCell = isAdmin ? `<td class="px-4 py-3 text-right font-medium admin-only">${profitDisplay}</td>` : '';
+  const adminCol = isAdmin ? `
+    <td class="px-4 py-3 text-center whitespace-nowrap admin-only">
+      <button onclick="App.openEditTransactionModal('${tx.transId}')" class="p-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs mr-1 font-semibold transition shadow-2xs inline-flex items-center" title="แก้ไขรายการ"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
+      <button onclick="App.confirmDeleteTransaction('${tx.transId}')" class="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-semibold transition shadow-2xs inline-flex items-center" title="ลบรายการ"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+    </td>
+  ` : '';
 
   const photoButton = tx.imageUrl ? `
     <button onclick="App.openImageViewerModal('${tx.imageUrl}', '${tx.productName}', '${timeStr}')" 
@@ -256,6 +262,7 @@ function prependTransactionRowDOM(tx) {
     ${profitCell}
     <td class="px-4 py-3 text-center">${photoButton}</td>
     <td class="px-4 py-3 text-slate-500 text-xs">${tx.operator || 'Staff'} ${tx.note ? `<br><span class="text-slate-400">(${tx.note})</span>` : ''}</td>
+    ${adminCol}
   `;
 
   tbody.prepend(tr);

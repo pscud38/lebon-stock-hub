@@ -1004,6 +1004,285 @@ const ApiService = {
   },
 
   /**
+   * ลบรายการประวัติธุรกรรม (Audit Trail) พร้อมคืนค่าสต็อกสินค้า
+   */
+  async deleteTransaction(transId) {
+    // 1. Supabase Path
+    if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
+      try {
+        const { url } = getSupabaseConfig();
+        const headers = getSupabaseHeaders();
+
+        // ดึงข้อมูล transaction เดิม เพื่อคำนวณคืนค่าสต็อก
+        const tRes = await fetch(`${url}/rest/v1/transactions?trans_id=eq.${encodeURIComponent(transId)}&select=*`, { headers });
+        if (!tRes.ok) throw new Error('ไม่สามารถดึงข้อมูลรายการเพื่อลบได้');
+        const tList = await tRes.json();
+        if (!tList || tList.length === 0) throw new Error('ไม่พบรายการรหัส: ' + transId);
+        const oldTrans = tList[0];
+        const productId = oldTrans.product_id;
+        const type = (oldTrans.type || '').toUpperCase();
+        const qty = Number(oldTrans.quantity) || 0;
+
+        // ดึงข้อมูลสินค้าเพื่อปรับปรุงสต็อก
+        const pRes = await fetch(`${url}/rest/v1/products?product_id=eq.${encodeURIComponent(productId)}&select=*`, { headers });
+        if (!pRes.ok) throw new Error('ไม่พบสินค้าที่เชื่อมโยงกับรายการนี้');
+        const pList = await pRes.json();
+        if (!pList || pList.length === 0) throw new Error('ไม่พบสินค้ารหัส: ' + productId);
+        const product = pList[0];
+        let currentStock = Number(product.current_stock) || 0;
+
+        // คำนวณสต็อกหลังลบรายการ
+        // OUT: คืนสินค้าเข้าสต็อก (+qty)
+        // IN: หักสินค้าออกจากสต็อก (-qty)
+        let newStock = currentStock;
+        if (type === 'OUT') {
+          newStock = currentStock + qty;
+        } else if (type === 'IN') {
+          if (currentStock - qty < 0) {
+            throw new Error(`ไม่สามารถลบรายการรับเข้านี้ได้ เนื่องจากจะทำให้สต็อกติดลบ (คงเหลือปัจจุบัน: ${currentStock}, จะถูกลดลง: ${qty})`);
+          }
+          newStock = currentStock - qty;
+        }
+
+        // Step 1: ลบ Transaction
+        const delRes = await fetch(`${url}/rest/v1/transactions?trans_id=eq.${encodeURIComponent(transId)}`, {
+          method: 'DELETE',
+          headers: headers
+        });
+        if (!delRes.ok) {
+          throw new Error('Supabase deleteTransaction failed: ' + (await delRes.text()));
+        }
+
+        // Step 2: ปรับปรุงสต็อกสินค้า
+        if (newStock !== currentStock) {
+          const patchRes = await fetch(`${url}/rest/v1/products?product_id=eq.${encodeURIComponent(productId)}`, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify({
+              current_stock: newStock,
+              last_updated: new Date().toISOString()
+            })
+          });
+          if (!patchRes.ok) {
+            console.warn('Failed to update product stock after deleting transaction:', await patchRes.text());
+          }
+        }
+
+        this.deleteLocalTransaction(transId, { productId, newStock });
+        return {
+          success: true,
+          message: `ลบรายการ ${transId} เรียบร้อยแล้ว สต็อกสินค้าคงเหลือ: ${newStock}`,
+          productId: productId,
+          newStock: newStock
+        };
+      } catch (sbErr) {
+        console.error('Supabase deleteTransaction error:', sbErr);
+        throw sbErr;
+      }
+    }
+
+    // 2. Google Apps Script Fallback
+    const apiUrl = getApiUrl();
+    if (apiUrl) {
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'deleteTransaction',
+            transId: transId
+          })
+        });
+        const json = await response.json();
+        if (json.success) {
+          this.deleteLocalTransaction(transId, json);
+          return json;
+        }
+        throw new Error(json.error || 'Failed to delete transaction');
+      } catch (err) {
+        console.error('API delete transaction failed:', err);
+        throw err;
+      }
+    }
+
+    // 3. LocalStorage Fallback
+    return this.deleteLocalTransaction(transId);
+  },
+
+  /**
+   * แก้ไขรายการประวัติธุรกรรม (Audit Trail) พร้อมปรับสต็อกและกำไรตามความแตกต่าง
+   */
+  async updateTransaction(transData) {
+    const transId = String(transData.transId).trim();
+    const newQty = Number(transData.quantity) || 0;
+    const newType = String(transData.type).toUpperCase();
+    const newTimestamp = transData.timestamp || new Date().toISOString();
+    const operator = transData.operator || 'Admin';
+    const note = transData.note || '';
+
+    if (!transId) throw new Error('กรุณาระบุรหัสรายการ');
+    if (newQty <= 0) throw new Error('จำนวนต้องมากกว่า 0');
+
+    // 1. Supabase Path
+    if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
+      try {
+        const { url } = getSupabaseConfig();
+        const headers = getSupabaseHeaders();
+
+        // ดึง transaction เดิม
+        const tRes = await fetch(`${url}/rest/v1/transactions?trans_id=eq.${encodeURIComponent(transId)}&select=*`, { headers });
+        if (!tRes.ok) throw new Error('ไม่สามารถดึงข้อมูลรายการเดิมได้');
+        const tList = await tRes.json();
+        if (!tList || tList.length === 0) throw new Error('ไม่พบรายการรหัส: ' + transId);
+        const oldTrans = tList[0];
+        const productId = oldTrans.product_id;
+        const oldType = (oldTrans.type || '').toUpperCase();
+        const oldQty = Number(oldTrans.quantity) || 0;
+
+        // ดึงข้อมูลสินค้า
+        const pRes = await fetch(`${url}/rest/v1/products?product_id=eq.${encodeURIComponent(productId)}&select=*`, { headers });
+        if (!pRes.ok) throw new Error('ไม่พบสินค้าที่เชื่อมโยงกับรายการนี้');
+        const pList = await pRes.json();
+        if (!pList || pList.length === 0) throw new Error('ไม่พบสินค้ารหัส: ' + productId);
+        const product = pList[0];
+        let currentStock = Number(product.current_stock) || 0;
+        const dbCostPrice = Number(product.cost_price) || 0;
+        const dbSalePrice = Number(product.sale_price) || 0;
+
+        // คำนวณการคืนสต็อกของรายการเดิม (Base Stock)
+        let baseStock = currentStock;
+        if (oldType === 'OUT') baseStock += oldQty;
+        else if (oldType === 'IN') baseStock -= oldQty;
+
+        // คำนวณผลกระทบของรายการใหม่
+        let newStock = baseStock;
+        if (newType === 'OUT') {
+          if (baseStock < newQty) {
+            throw new Error(`สต็อกคงเหลือไม่พอ! (ต้องการเบิก ${newQty} ชิ้น แต่มีอยู่ ${baseStock} ชิ้น)`);
+          }
+          newStock = baseStock - newQty;
+        } else if (newType === 'IN') {
+          newStock = baseStock + newQty;
+          if (newStock < 0) {
+            throw new Error(`การแก้ไขนี้ทำให้สต็อกติดลบ (${newStock} ชิ้น) ไม่สามารถบันทึกได้`);
+          }
+        } else if (newType === 'ADJUST') {
+          newStock = newQty;
+        }
+
+        // คำนวณการเงิน
+        const costPrice = (transData.costPrice !== undefined && transData.costPrice !== null && transData.costPrice !== '') 
+          ? Number(transData.costPrice) 
+          : (Number(oldTrans.cost_price) || dbCostPrice);
+        const salePrice = (transData.salePrice !== undefined && transData.salePrice !== null && transData.salePrice !== '') 
+          ? Number(transData.salePrice) 
+          : (Number(oldTrans.sale_price) || dbSalePrice);
+
+        let totalCost = 0;
+        let totalRevenue = 0;
+        let profit = 0;
+
+        if (newType === 'OUT') {
+          totalCost = Number((newQty * costPrice).toFixed(2));
+          totalRevenue = Number((newQty * salePrice).toFixed(2));
+          profit = Number((totalRevenue - totalCost).toFixed(2));
+        } else if (newType === 'IN') {
+          totalCost = Number((newQty * costPrice).toFixed(2));
+          totalRevenue = 0;
+          profit = 0;
+        }
+
+        // PATCH transactions
+        const updateTransPayload = {
+          type: newType,
+          quantity: newQty,
+          cost_price: costPrice,
+          sale_price: salePrice,
+          total_cost: totalCost,
+          total_revenue: totalRevenue,
+          profit: profit,
+          operator: operator,
+          note: note,
+          timestamp: newTimestamp
+        };
+
+        const patchTransRes = await fetch(`${url}/rest/v1/transactions?trans_id=eq.${encodeURIComponent(transId)}`, {
+          method: 'PATCH',
+          headers: headers,
+          body: JSON.stringify(updateTransPayload)
+        });
+
+        if (!patchTransRes.ok) {
+          throw new Error('Supabase updateTransaction failed: ' + (await patchTransRes.text()));
+        }
+
+        // PATCH products stock
+        if (newStock !== currentStock) {
+          const patchProdRes = await fetch(`${url}/rest/v1/products?product_id=eq.${encodeURIComponent(productId)}`, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify({
+              current_stock: newStock,
+              last_updated: new Date().toISOString()
+            })
+          });
+          if (!patchProdRes.ok) {
+            console.warn('Failed to update product stock after updating transaction:', await patchProdRes.text());
+          }
+        }
+
+        const updatedTx = {
+          transId,
+          productId,
+          productName: product.product_name,
+          ...updateTransPayload,
+          imageUrl: oldTrans.image_url || ''
+        };
+
+        this.updateLocalTransaction(updatedTx, { productId, newStock });
+
+        return {
+          success: true,
+          message: `แก้ไขรายการ ${transId} สำเร็จ! สต็อกคงเหลือ: ${newStock}`,
+          transaction: updatedTx,
+          newStock: newStock,
+          productId: productId
+        };
+      } catch (sbErr) {
+        console.error('Supabase updateTransaction error:', sbErr);
+        throw sbErr;
+      }
+    }
+
+    // 2. Google Apps Script Fallback
+    const apiUrl = getApiUrl();
+    if (apiUrl) {
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'updateTransaction',
+            ...transData
+          })
+        });
+        const json = await response.json();
+        if (json.success) {
+          this.updateLocalTransaction(json.transaction || transData, json);
+          return json;
+        }
+        throw new Error(json.error || 'Failed to update transaction');
+      } catch (err) {
+        console.error('API update transaction failed:', err);
+        throw err;
+      }
+    }
+
+    // 3. LocalStorage Fallback
+    return this.updateLocalTransaction(transData);
+  },
+
+  /**
    * ปิดการแจ้งเตือนสต็อกใกล้หมด (Targeted PATCH - ป้องกัน BUG-01 ไม่ลบต้นทุน)
    */
   async muteProductAlert(productId) {
@@ -1691,6 +1970,125 @@ const ApiService = {
     products = products.filter(p => p.productId.toLowerCase() !== String(productId).toLowerCase());
     localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
     return { success: true, message: `ลบสินค้า ${productId} เรียบร้อยแล้ว` };
+  },
+
+  deleteLocalTransaction(transId, meta = {}) {
+    let transactions = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.TRANSACTIONS)) || JSON.parse(JSON.stringify(CONFIG.DEFAULT_TRANSACTIONS));
+    let products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS)) || JSON.parse(JSON.stringify(CONFIG.DEFAULT_PRODUCTS));
+
+    const txIndex = transactions.findIndex(t => t.transId === transId);
+    if (txIndex !== -1) {
+      const oldTrans = transactions[txIndex];
+      const productId = oldTrans.productId;
+      const type = (oldTrans.type || '').toUpperCase();
+      const qty = Number(oldTrans.quantity) || 0;
+
+      const pIdx = products.findIndex(p => p.productId.toLowerCase() === productId.toLowerCase());
+      if (pIdx !== -1) {
+        if (meta.newStock !== undefined) {
+          products[pIdx].currentStock = meta.newStock;
+        } else {
+          if (type === 'OUT') {
+            products[pIdx].currentStock = (Number(products[pIdx].currentStock) || 0) + qty;
+          } else if (type === 'IN') {
+            products[pIdx].currentStock = Math.max(0, (Number(products[pIdx].currentStock) || 0) - qty);
+          }
+        }
+        products[pIdx].lastUpdated = new Date().toISOString();
+      }
+
+      transactions.splice(txIndex, 1);
+      localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+      localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+
+      return {
+        success: true,
+        message: `ลบรายการ ${transId} เรียบร้อยแล้ว`,
+        productId: productId,
+        newStock: pIdx !== -1 ? products[pIdx].currentStock : 0
+      };
+    }
+
+    return { success: true, message: `ลบรายการ ${transId} เรียบร้อยแล้ว` };
+  },
+
+  updateLocalTransaction(transData, meta = {}) {
+    let transactions = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.TRANSACTIONS)) || JSON.parse(JSON.stringify(CONFIG.DEFAULT_TRANSACTIONS));
+    let products = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.PRODUCTS)) || JSON.parse(JSON.stringify(CONFIG.DEFAULT_PRODUCTS));
+
+    const transId = String(transData.transId).trim();
+    const txIndex = transactions.findIndex(t => t.transId === transId);
+    if (txIndex === -1) {
+      throw new Error('ไม่พบรายการที่ต้องการแก้ไข: ' + transId);
+    }
+
+    const oldTrans = transactions[txIndex];
+    const productId = oldTrans.productId;
+    const pIdx = products.findIndex(p => p.productId.toLowerCase() === productId.toLowerCase());
+
+    const newQty = Number(transData.quantity) || oldTrans.quantity;
+    const newType = String(transData.type || oldTrans.type).toUpperCase();
+    const costPrice = transData.costPrice !== undefined ? Number(transData.costPrice) : (oldTrans.costPrice || 0);
+    const salePrice = transData.salePrice !== undefined ? Number(transData.salePrice) : (oldTrans.salePrice || 0);
+
+    let totalCost = 0;
+    let totalRevenue = 0;
+    let profit = 0;
+
+    if (newType === 'OUT') {
+      totalCost = Number((newQty * costPrice).toFixed(2));
+      totalRevenue = Number((newQty * salePrice).toFixed(2));
+      profit = Number((totalRevenue - totalCost).toFixed(2));
+    } else if (newType === 'IN') {
+      totalCost = Number((newQty * costPrice).toFixed(2));
+      totalRevenue = 0;
+      profit = 0;
+    }
+
+    if (pIdx !== -1) {
+      if (meta.newStock !== undefined) {
+        products[pIdx].currentStock = meta.newStock;
+      } else {
+        let baseStock = Number(products[pIdx].currentStock) || 0;
+        if (oldTrans.type === 'OUT') baseStock += Number(oldTrans.quantity) || 0;
+        else if (oldTrans.type === 'IN') baseStock -= Number(oldTrans.quantity) || 0;
+
+        let newStock = baseStock;
+        if (newType === 'OUT') newStock = baseStock - newQty;
+        else if (newType === 'IN') newStock = baseStock + newQty;
+        else if (newType === 'ADJUST') newStock = newQty;
+
+        products[pIdx].currentStock = Math.max(0, newStock);
+      }
+      products[pIdx].lastUpdated = new Date().toISOString();
+    }
+
+    const updated = {
+      ...oldTrans,
+      ...transData,
+      type: newType,
+      quantity: newQty,
+      costPrice: costPrice,
+      salePrice: salePrice,
+      totalCost: totalCost,
+      totalRevenue: totalRevenue,
+      profit: profit,
+      timestamp: transData.timestamp || oldTrans.timestamp,
+      operator: transData.operator || oldTrans.operator,
+      note: transData.note !== undefined ? transData.note : oldTrans.note
+    };
+
+    transactions[txIndex] = updated;
+    localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+    localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+
+    return {
+      success: true,
+      message: `แก้ไขรายการ ${transId} สำเร็จ!`,
+      transaction: updated,
+      productId: productId,
+      newStock: pIdx !== -1 ? products[pIdx].currentStock : 0
+    };
   }
 };
 

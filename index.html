@@ -855,6 +855,7 @@
                 <th class="px-4 py-3.5 text-right admin-only">กำไร</th>
                 <th class="px-4 py-3.5 text-center">รูปหลักฐาน</th>
                 <th class="px-4 py-3.5">ผู้ทำรายการ</th>
+                <th class="px-4 py-3.5 text-center admin-only">จัดการ</th>
               </tr>
             </thead>
             <tbody id="history-table-tbody" class="divide-y divide-slate-100">
@@ -1385,6 +1386,123 @@
           <button type="button" onclick="App.closeProductModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition">ยกเลิก</button>
           <button type="submit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition flex items-center gap-1.5 active:scale-95">
             <i data-lucide="save" class="w-4 h-4"></i> บันทึกข้อมูล
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: EDIT TRANSACTION (ADMIN ONLY) -->
+  <!-- ========================================================================= -->
+  <div id="edit-transaction-modal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto border border-slate-100">
+      
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
+          <i data-lucide="edit-3" class="w-4 h-4 text-indigo-600"></i> แก้ไขรายการประวัติ (Audit Trail)
+        </h3>
+        <button onclick="App.closeEditTransactionModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 text-lg font-bold flex items-center justify-center transition">&times;</button>
+      </div>
+
+      <form id="edit-transaction-form" onsubmit="event.preventDefault(); App.saveTransactionFromModal();" class="space-y-4 text-xs">
+        
+        <!-- Transaction ID & Timestamp -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">รหัสรายการ (Trans ID)</label>
+            <input type="text" id="modal-trans-id" readonly
+              class="w-full p-2.5 border border-slate-200 bg-slate-50 text-slate-500 rounded-xl text-xs font-mono font-bold focus:outline-none cursor-not-allowed">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">วัน-เวลา ทำรายการ *</label>
+            <input type="datetime-local" id="modal-trans-timestamp" required
+              class="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none bg-white">
+          </div>
+        </div>
+
+        <!-- Product Details (Readonly) -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">สินค้า</label>
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
+            <div>
+              <div id="modal-trans-product-name" class="font-bold text-slate-800 text-sm">-</div>
+              <div id="modal-trans-product-id" class="text-[11px] text-slate-400 font-mono mt-0.5">-</div>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] text-slate-400 block font-medium">สต็อกปัจจุบัน</span>
+              <span id="modal-trans-current-stock" class="font-extrabold text-slate-700 text-sm">0</span>
+            </div>
+          </div>
+          <input type="hidden" id="modal-trans-hidden-product-id">
+        </div>
+
+        <!-- Type & Quantity -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">ประเภทรายการ *</label>
+            <select id="modal-trans-type" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none bg-white">
+              <option value="OUT">↗ เบิก/ขาย (OUT)</option>
+              <option value="IN">↙ รับเข้า (IN)</option>
+              <option value="ADJUST">⚙ ปรับยอด (ADJUST)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">จำนวน *</label>
+            <input type="number" id="modal-trans-quantity" min="1" step="1" required
+              class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none tabular-nums">
+          </div>
+        </div>
+
+        <!-- Price & Cost -->
+        <div class="grid grid-cols-2 gap-3">
+          <div id="modal-trans-saleprice-container">
+            <label class="block font-bold text-slate-700 mb-1">ราคาขายต่อชิ้น (฿)</label>
+            <input type="number" id="modal-trans-saleprice" step="0.01" min="0"
+              class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none tabular-nums">
+          </div>
+          <div id="modal-trans-costprice-container">
+            <label class="block font-bold text-slate-700 mb-1">ต้นทุนต่อชิ้น (฿)</label>
+            <input type="number" id="modal-trans-costprice" step="0.01" min="0"
+              class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none tabular-nums">
+          </div>
+        </div>
+
+        <!-- Live Impact Preview Banner -->
+        <div class="p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-2xl space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-600 font-medium">ผลกระทบต่อสต็อกสินค้า:</span>
+            <span id="modal-trans-stock-preview" class="font-extrabold text-indigo-700">คำนวณ...</span>
+          </div>
+          <div id="modal-trans-finance-preview" class="flex items-center justify-between text-xs pt-1 border-t border-indigo-100/60">
+            <span class="text-slate-600 font-medium">ยอดขายและกำไร:</span>
+            <span id="modal-trans-profit-preview" class="font-extrabold text-emerald-600">คำนวณ...</span>
+          </div>
+          <div id="modal-trans-stock-warning" class="hidden text-xs text-rose-600 font-bold flex items-center gap-1">
+            <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> <span>คำเตือน: การแก้ไขนี้จะทำให้สต็อกติดลบ!</span>
+          </div>
+        </div>
+
+        <!-- Operator & Note -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">ผู้ทำรายการ</label>
+            <input type="text" id="modal-trans-operator" placeholder="Admin"
+              class="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">หมายเหตุ</label>
+            <input type="text" id="modal-trans-note" placeholder="เหตุผลการแก้ไข เช่น ลงจำนวนผิด"
+              class="w-full p-2.5 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
+          </div>
+        </div>
+
+        <!-- Footer Buttons -->
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="App.closeEditTransactionModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition">ยกเลิก</button>
+          <button type="submit" id="btn-save-edit-transaction" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition flex items-center gap-1.5 active:scale-95">
+            <i data-lucide="save" class="w-4 h-4"></i> บันทึกการแก้ไข
           </button>
         </div>
 

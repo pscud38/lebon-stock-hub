@@ -468,7 +468,7 @@ const App = {
     const isAdmin = AuthManager.isAdmin();
 
     if (this.transactions.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="py-8 text-center text-slate-400">ยังไม่มีประวัติการทำรายการ</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${isAdmin ? 10 : 9}" class="py-8 text-center text-slate-400">ยังไม่มีประวัติการทำรายการ</td></tr>`;
       return;
     }
 
@@ -486,7 +486,7 @@ const App = {
         ? `<span class="${t.profit >= 0 ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-semibold'}">฿${(t.profit || 0).toLocaleString()}</span>` 
         : '-';
 
-      const profitCell = isAdmin ? `<td class="px-4 py-3 text-right font-medium">${profitDisplay}</td>` : '';
+      const profitCell = isAdmin ? `<td class="px-4 py-3 text-right font-medium admin-only">${profitDisplay}</td>` : '';
 
       const photoButton = t.imageUrl ? `
         <button onclick="App.openImageViewerModal('${t.imageUrl}', '${t.productName}', '${timeStr}')" 
@@ -495,8 +495,15 @@ const App = {
         </button>
       ` : '<span class="text-slate-300 text-xs">-</span>';
 
+      const adminCol = isAdmin ? `
+        <td class="px-4 py-3 text-center whitespace-nowrap admin-only">
+          <button onclick="App.openEditTransactionModal('${t.transId}')" class="p-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs mr-1 font-semibold transition shadow-2xs inline-flex items-center" title="แก้ไขรายการ"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
+          <button onclick="App.confirmDeleteTransaction('${t.transId}')" class="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-semibold transition shadow-2xs inline-flex items-center" title="ลบรายการ"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        </td>
+      ` : '';
+
       return `
-        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition text-sm">
+        <tr id="tx-row-${t.transId}" class="border-b border-slate-100 hover:bg-slate-50/80 transition text-sm">
           <td class="px-4 py-3 font-mono text-xs text-slate-400">${t.transId}</td>
           <td class="px-4 py-3 text-slate-500 whitespace-nowrap font-mono text-xs">${timeStr}</td>
           <td class="px-4 py-3">${typeBadge}</td>
@@ -506,6 +513,7 @@ const App = {
           ${profitCell}
           <td class="px-4 py-3 text-center">${photoButton}</td>
           <td class="px-4 py-3 text-slate-500 text-xs">${t.operator || 'Staff'} ${t.note ? `<br><span class="text-slate-400">(${t.note})</span>` : ''}</td>
+          ${adminCol}
         </tr>
       `;
     }).join('');
@@ -1653,6 +1661,24 @@ const App = {
       e.preventDefault();
       await this.saveProductFromModal();
     });
+
+    const transTypeSelect = document.getElementById('modal-trans-type');
+    const transQtyInput = document.getElementById('modal-trans-quantity');
+    const transSaleInput = document.getElementById('modal-trans-saleprice');
+    const transCostInput = document.getElementById('modal-trans-costprice');
+
+    if (transTypeSelect) {
+      transTypeSelect.addEventListener('change', () => this.updateEditTransactionPreview());
+    }
+    if (transQtyInput) {
+      transQtyInput.addEventListener('input', () => this.updateEditTransactionPreview());
+    }
+    if (transSaleInput) {
+      transSaleInput.addEventListener('input', () => this.updateEditTransactionPreview());
+    }
+    if (transCostInput) {
+      transCostInput.addEventListener('input', () => this.updateEditTransactionPreview());
+    }
   },
 
   setProductModalNote(noteText) {
@@ -1869,6 +1895,228 @@ const App = {
       await this.refreshData();
     } catch (err) {
       this.showToast('ลบไม่สำเร็จ: ' + err.message, 'error');
+    } finally {
+      this.showLoading(false);
+    }
+  },
+
+  openEditTransactionModal(transId) {
+    const trans = this.transactions.find(t => t.transId === transId);
+    if (!trans) {
+      this.showToast('ไม่พบข้อมูลรายการ: ' + transId, 'error');
+      return;
+    }
+
+    const product = this.products.find(p => p.productId === trans.productId);
+
+    const transIdInput = document.getElementById('modal-trans-id');
+    if (transIdInput) transIdInput.value = trans.transId;
+    
+    // Format timestamp for datetime-local
+    const dt = new Date(trans.timestamp);
+    const pad = n => String(n).padStart(2, '0');
+    const localIso = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    const tsInput = document.getElementById('modal-trans-timestamp');
+    if (tsInput) tsInput.value = localIso;
+
+    const nameEl = document.getElementById('modal-trans-product-name');
+    if (nameEl) nameEl.textContent = trans.productName || (product ? product.productName : '-');
+    const pidEl = document.getElementById('modal-trans-product-id');
+    if (pidEl) pidEl.textContent = trans.productId || '-';
+    const hiddenPid = document.getElementById('modal-trans-hidden-product-id');
+    if (hiddenPid) hiddenPid.value = trans.productId || '';
+    const stockEl = document.getElementById('modal-trans-current-stock');
+    if (stockEl) stockEl.textContent = product ? `${product.currentStock} ${product.unit || 'ชิ้น'}` : '-';
+
+    const typeEl = document.getElementById('modal-trans-type');
+    if (typeEl) typeEl.value = trans.type || 'OUT';
+    const qtyEl = document.getElementById('modal-trans-quantity');
+    if (qtyEl) qtyEl.value = trans.quantity || 1;
+
+    const defaultSalePrice = (trans.salePrice !== undefined && trans.salePrice !== null) ? trans.salePrice : (product ? product.salePrice : 0);
+    const defaultCostPrice = (trans.costPrice !== undefined && trans.costPrice !== null) ? trans.costPrice : (product ? product.costPrice : 0);
+
+    const saleEl = document.getElementById('modal-trans-saleprice');
+    if (saleEl) saleEl.value = defaultSalePrice;
+    const costEl = document.getElementById('modal-trans-costprice');
+    if (costEl) costEl.value = defaultCostPrice;
+
+    const opEl = document.getElementById('modal-trans-operator');
+    if (opEl) opEl.value = trans.operator || 'Admin';
+    const noteEl = document.getElementById('modal-trans-note');
+    if (noteEl) noteEl.value = trans.note || '';
+
+    this.updateEditTransactionPreview();
+
+    document.getElementById('edit-transaction-modal')?.classList.remove('hidden');
+    this.refreshIcons();
+  },
+
+  closeEditTransactionModal() {
+    document.getElementById('edit-transaction-modal')?.classList.add('hidden');
+  },
+
+  updateEditTransactionPreview() {
+    const transId = document.getElementById('modal-trans-id')?.value;
+    const productId = document.getElementById('modal-trans-hidden-product-id')?.value;
+    const type = document.getElementById('modal-trans-type')?.value || 'OUT';
+    const qty = Math.max(0, Number(document.getElementById('modal-trans-quantity')?.value) || 0);
+    const salePrice = Math.max(0, Number(document.getElementById('modal-trans-saleprice')?.value) || 0);
+    const costPrice = Math.max(0, Number(document.getElementById('modal-trans-costprice')?.value) || 0);
+
+    const oldTrans = this.transactions.find(t => t.transId === transId);
+    const product = this.products.find(p => p.productId === productId);
+
+    const stockPreviewEl = document.getElementById('modal-trans-stock-preview');
+    const profitPreviewEl = document.getElementById('modal-trans-profit-preview');
+    const warningEl = document.getElementById('modal-trans-stock-warning');
+    const submitBtn = document.getElementById('btn-save-edit-transaction');
+
+    if (product) {
+      const currentStock = Number(product.currentStock) || 0;
+      let baseStock = currentStock;
+
+      if (oldTrans) {
+        if (oldTrans.type === 'OUT') baseStock += Number(oldTrans.quantity) || 0;
+        else if (oldTrans.type === 'IN') baseStock -= Number(oldTrans.quantity) || 0;
+      }
+
+      let projectedStock = baseStock;
+      if (type === 'OUT') projectedStock = baseStock - qty;
+      else if (type === 'IN') projectedStock = baseStock + qty;
+      else if (type === 'ADJUST') projectedStock = qty;
+
+      if (stockPreviewEl) {
+        stockPreviewEl.textContent = `${currentStock} ➔ ${projectedStock} ${product.unit || 'ชิ้น'}`;
+        stockPreviewEl.className = projectedStock >= 0 ? 'font-extrabold text-indigo-700' : 'font-extrabold text-rose-600';
+      }
+
+      if (projectedStock < 0) {
+        warningEl?.classList.remove('hidden');
+        if (submitBtn) submitBtn.disabled = true;
+      } else {
+        warningEl?.classList.add('hidden');
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    }
+
+    if (profitPreviewEl) {
+      if (type === 'OUT') {
+        const rev = qty * salePrice;
+        const profit = rev - (qty * costPrice);
+        profitPreviewEl.textContent = `ยอดขาย ฿${rev.toLocaleString()} | กำไร ฿${profit.toLocaleString()}`;
+        profitPreviewEl.className = profit >= 0 ? 'font-extrabold text-emerald-600' : 'font-extrabold text-rose-600';
+      } else if (type === 'IN') {
+        const cost = qty * costPrice;
+        profitPreviewEl.textContent = `ต้นทุนรับเข้า ฿${cost.toLocaleString()}`;
+        profitPreviewEl.className = 'font-extrabold text-slate-700';
+      } else {
+        profitPreviewEl.textContent = 'ปรับยอดสต็อก';
+        profitPreviewEl.className = 'font-extrabold text-amber-600';
+      }
+    }
+  },
+
+  async saveTransactionFromModal() {
+    const transId = document.getElementById('modal-trans-id')?.value;
+    const productId = document.getElementById('modal-trans-hidden-product-id')?.value;
+    const timestampVal = document.getElementById('modal-trans-timestamp')?.value;
+    const type = document.getElementById('modal-trans-type')?.value;
+    const qty = Number(document.getElementById('modal-trans-quantity')?.value) || 0;
+    const salePrice = Number(document.getElementById('modal-trans-saleprice')?.value) || 0;
+    const costPrice = Number(document.getElementById('modal-trans-costprice')?.value) || 0;
+    const operator = document.getElementById('modal-trans-operator')?.value?.trim() || 'Admin';
+    const note = document.getElementById('modal-trans-note')?.value?.trim() || '';
+
+    if (!transId) {
+      this.showToast('ไม่พบรหัสรายการ', 'error');
+      return;
+    }
+    if (qty <= 0) {
+      this.showToast('จำนวนต้องมากกว่า 0', 'warning');
+      return;
+    }
+
+    const timestamp = timestampVal ? new Date(timestampVal).toISOString() : new Date().toISOString();
+
+    try {
+      this.showLoading(true);
+      const res = await ApiService.updateTransaction({
+        transId,
+        productId,
+        type,
+        quantity: qty,
+        salePrice,
+        costPrice,
+        operator,
+        note,
+        timestamp
+      });
+
+      this.showToast(res.message || 'บันทึกการแก้ไขรายการสำเร็จ', 'success');
+      this.closeEditTransactionModal();
+
+      if (window.appStore) {
+        const txIdx = window.appStore.state.transactions.findIndex(t => t.transId === transId);
+        if (txIdx !== -1 && res.transaction) {
+          window.appStore.state.transactions[txIdx] = { ...window.appStore.state.transactions[txIdx], ...res.transaction };
+        }
+        if (res.productId && res.newStock !== undefined) {
+          const pIdx = window.appStore.state.products.findIndex(p => p.productId === res.productId);
+          if (pIdx !== -1) {
+            window.appStore.state.products[pIdx].currentStock = res.newStock;
+            patchProductRowDOM(window.appStore.state.products[pIdx]);
+          }
+        }
+        window.appStore.recalculateSummary();
+      }
+
+      await this.refreshData();
+    } catch (err) {
+      this.showToast('แก้ไขไม่สำเร็จ: ' + err.message, 'error');
+    } finally {
+      this.showLoading(false);
+    }
+  },
+
+  async confirmDeleteTransaction(transId) {
+    const trans = this.transactions.find(t => t.transId === transId);
+    if (!trans) return;
+
+    const typeLabel = trans.type === 'OUT' ? 'เบิก/ขาย (OUT)' : trans.type === 'IN' ? 'รับเข้า (IN)' : 'ปรับยอด (ADJUST)';
+    const stockEffect = trans.type === 'OUT' ? `คืนสต็อกเข้าคลัง +${trans.quantity}` : trans.type === 'IN' ? `หักสต็อกออกจากคลัง -${trans.quantity}` : 'ไม่เปลี่ยนแปลง';
+
+    const msg = `คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้?\n\n` +
+      `• รหัสรายการ: ${trans.transId}\n` +
+      `• สินค้า: ${trans.productName}\n` +
+      `• ประเภท: ${typeLabel} จำนวน ${trans.quantity} ชิ้น\n` +
+      `• ผลกระทบสต็อก: ${stockEffect}\n\n` +
+      `⚠️ ข้อมูลและประวัติการลบจะไม่สามารถกู้คืนได้ ยืนยันดำเนินการต่อ?`;
+
+    if (!confirm(msg)) return;
+
+    try {
+      this.showLoading(true);
+      const res = await ApiService.deleteTransaction(transId);
+      this.showToast(res.message || 'ลบรายการสำเร็จ', 'success');
+
+      if (window.appStore) {
+        const txIdx = window.appStore.state.transactions.findIndex(t => t.transId === transId);
+        if (txIdx !== -1) window.appStore.state.transactions.splice(txIdx, 1);
+        if (res.productId && res.newStock !== undefined) {
+          const pIdx = window.appStore.state.products.findIndex(p => p.productId === res.productId);
+          if (pIdx !== -1) {
+            window.appStore.state.products[pIdx].currentStock = res.newStock;
+            patchProductRowDOM(window.appStore.state.products[pIdx]);
+          }
+        }
+        removeTransactionRowDOM(transId);
+        window.appStore.recalculateSummary();
+      }
+
+      await this.refreshData();
+    } catch (err) {
+      this.showToast('ลบรายการไม่สำเร็จ: ' + err.message, 'error');
     } finally {
       this.showLoading(false);
     }
