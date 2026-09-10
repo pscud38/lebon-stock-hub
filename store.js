@@ -234,8 +234,8 @@ function prependTransactionRowDOM(tx) {
   const profitCell = isAdmin ? `<td class="px-4 py-3 text-right font-medium admin-only">${profitDisplay}</td>` : '';
   const adminCol = isAdmin ? `
     <td class="px-4 py-3 text-center whitespace-nowrap admin-only">
-      <button onclick="App.openEditTransactionModal('${tx.transId}')" class="p-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs mr-1 font-semibold transition shadow-2xs inline-flex items-center" title="แก้ไขรายการ"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
-      <button onclick="App.confirmDeleteTransaction('${tx.transId}')" class="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-semibold transition shadow-2xs inline-flex items-center" title="ลบรายการ"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+      <button onclick="App.openEditTransactionModal('${tx.transId}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/60 rounded-lg text-xs font-bold inline-flex items-center gap-1 transition mr-1 shadow-2xs cursor-pointer" title="แก้ไขรายการ"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i> ✏️ แก้ไข</button>
+      <button onclick="App.confirmDeleteTransaction('${tx.transId}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/60 rounded-lg text-xs font-bold inline-flex items-center gap-1 transition shadow-2xs cursor-pointer" title="ลบรายการ"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 🗑️ ลบ</button>
     </td>
   ` : '';
 
