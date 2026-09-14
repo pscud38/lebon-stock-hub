@@ -2713,15 +2713,19 @@ const App = {
       const q = this.preorderSearchKeyword.toLowerCase().trim();
       list = list.filter(p => 
         (p.id && p.id.toLowerCase().includes(q)) ||
+        (p.preorderId && p.preorderId.toLowerCase().includes(q)) ||
+        (p.supplierName && p.supplierName.toLowerCase().includes(q)) ||
         (p.customerName && p.customerName.toLowerCase().includes(q)) ||
+        (p.supplierContact && p.supplierContact.toLowerCase().includes(q)) ||
         (p.customerContact && p.customerContact.toLowerCase().includes(q)) ||
         (p.productName && p.productName.toLowerCase().includes(q)) ||
-        (p.trackingNo && p.trackingNo.toLowerCase().includes(q))
+        (p.trackingNo && p.trackingNo.toLowerCase().includes(q)) ||
+        (p.note && p.note.toLowerCase().includes(q))
       );
     }
 
     // Sort newest first
-    list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    list.sort((a, b) => new Date(b.createdAt || b.lastUpdated || 0) - new Date(a.createdAt || a.lastUpdated || 0));
 
     if (list.length === 0) {
       tbody.innerHTML = `
@@ -2729,9 +2733,9 @@ const App = {
           <td colspan="10" class="py-12 text-center text-slate-400">
             <div class="flex flex-col items-center justify-center gap-2">
               <i data-lucide="inbox" class="w-8 h-8 text-slate-300"></i>
-              <p class="font-medium text-xs">ไม่พบข้อมูลรายการพรีออเดอร์</p>
+              <p class="font-medium text-xs">ไม่พบรายการสั่งของร้านส่ง (Pre-order)</p>
               <button onclick="App.openPreorderModal()" class="mt-1 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 font-bold rounded-xl text-xs transition">
-                + เพิ่มรายการใหม่
+                + เพิ่มรายการสั่งจองใหม่
               </button>
             </div>
           </td>
@@ -2744,11 +2748,12 @@ const App = {
     const statusBadge = (st) => {
       switch (st) {
         case 'WAITING_ARRIVAL':
-          return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">⏳ รอสินค้าเข้า</span>';
+          return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">⏳ รอของเข้า</span>';
         case 'ARRIVED':
-          return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">📦 สินค้ามาถึงแล้ว</span>';
+          return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">📦 ถึงร้านแล้ว</span>';
+        case 'STOCKED':
         case 'COMPLETED':
-          return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">🚚 ส่งมอบแล้ว</span>';
+          return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">✅ รับเข้าสต็อกแล้ว</span>';
         case 'CANCELLED':
           return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">❌ ยกเลิก</span>';
         default:
@@ -2757,30 +2762,34 @@ const App = {
     };
 
     tbody.innerHTML = list.map(item => {
-      const totalAmount = Number(item.totalAmount) || ((Number(item.quantity) || 1) * (Number(item.salePrice) || 0));
+      const id = item.id || item.preorderId || '-';
+      const supplier = item.supplierName || item.customerName || '-';
+      const contact = item.supplierContact || item.customerContact || '';
+      const unitCost = Number(item.costPrice !== undefined && item.costPrice !== null ? item.costPrice : item.salePrice) || 0;
+      const totalAmount = Number(item.totalAmount) || ((Number(item.quantity) || 1) * unitCost);
       const deposit = Number(item.depositAmount) || 0;
-      const remaining = Math.max(0, totalAmount - deposit);
-      const isPaidFull = remaining <= 0;
+      const remaining = Number(item.remainingAmount !== undefined && item.remainingAmount !== null ? item.remainingAmount : Math.max(0, totalAmount - deposit));
+      const isSettled = remaining <= 0 || item.status === 'STOCKED' || item.status === 'COMPLETED';
 
       return `
         <tr class="hover:bg-slate-50/80 transition-colors group">
-          <td class="px-4 py-3 font-mono font-bold text-violet-700">${item.id || '-'}</td>
+          <td class="px-4 py-3 font-mono font-bold text-violet-700">${id}</td>
           <td class="px-4 py-3">
-            <div class="font-bold text-slate-800">${item.customerName || '-'}</div>
-            <div class="text-[11px] text-slate-400 font-medium">${item.customerContact || '-'}</div>
+            <div class="font-bold text-slate-800">${supplier}</div>
+            ${contact ? `<div class="text-[11px] text-slate-400 font-medium">${contact}</div>` : ''}
           </td>
           <td class="px-4 py-3">
             <div class="font-bold text-slate-900">${item.productName || '-'}</div>
-            <div class="text-[11px] text-slate-400">@฿${(Number(item.salePrice) || 0).toLocaleString()} / ชิ้น</div>
+            <div class="text-[11px] text-slate-400">ราคาส่ง @฿${unitCost.toLocaleString()} / ชิ้น</div>
           </td>
           <td class="px-4 py-3 text-center font-extrabold text-slate-700">${item.quantity || 1}</td>
           <td class="px-4 py-3 text-right font-extrabold text-indigo-600 tabular-nums">฿${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
           <td class="px-4 py-3 text-right font-bold text-emerald-600 tabular-nums">฿${deposit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-          <td class="px-4 py-3 text-right font-extrabold ${isPaidFull ? 'text-slate-400' : 'text-rose-600'} tabular-nums">
-            ${isPaidFull ? '<span class="text-emerald-600 font-bold">ชำระครบแล้ว</span>' : `฿${remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          <td class="px-4 py-3 text-right font-extrabold ${isSettled ? 'text-slate-400' : 'text-rose-600'} tabular-nums">
+            ${isSettled ? '<span class="text-emerald-600 font-bold">จ่ายครบแล้ว</span>' : `฿${remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </td>
           <td class="px-4 py-3 text-center">
-            <div class="font-medium text-slate-700">${item.expectedArrival ? item.expectedArrival : '-'}</div>
+            <div class="font-medium text-slate-700">${item.expectedArrival || item.expectedDate || '-'}</div>
             ${item.trackingNo ? `<div class="text-[10px] text-indigo-500 font-mono font-semibold truncate max-w-[120px] mx-auto" title="${item.trackingNo}">${item.trackingNo}</div>` : ''}
           </td>
           <td class="px-4 py-3 text-center">
@@ -2789,22 +2798,25 @@ const App = {
           <td class="px-4 py-3 text-center">
             <div class="flex items-center justify-center gap-1">
               ${item.status === 'WAITING_ARRIVAL' ? `
-                <button type="button" onclick="App.quickUpdatePreorderStatus('${item.id}', 'ARRIVED')" title="ทำเครื่องหมายว่าสินค้ามาถึงแล้ว"
+                <button type="button" onclick="App.quickUpdatePreorderStatus('${id}', 'ARRIVED')" title="ทำเครื่องหมายว่าของถึงร้านแล้ว"
                   class="px-2 py-1 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white rounded-lg text-[10px] font-bold transition">
                   📦 ของถึง
                 </button>
               ` : ''}
-              ${item.status === 'ARRIVED' ? `
-                <button type="button" onclick="App.quickUpdatePreorderStatus('${item.id}', 'COMPLETED')" title="ทำเครื่องหมายว่าส่งมอบลูกค้าแล้ว"
-                  class="px-2 py-1 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded-lg text-[10px] font-bold transition">
-                  🚚 ส่งแล้ว
+              ${item.status === 'ARRIVED' || item.status === 'WAITING_ARRIVAL' ? `
+                <button type="button" onclick="App.receivePreorderToStock('${id}')" title="รับสินค้านี้เข้าสต็อกสินค้าทันที"
+                  class="px-2.5 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-[10px] font-bold shadow-xs transition flex items-center gap-1 active:scale-95">
+                  <i data-lucide="sparkles" class="w-3 h-3"></i> รับเข้าสต็อก
                 </button>
               ` : ''}
-              <button type="button" onclick="App.openPreorderModal('${item.id}')" title="แก้ไขรายการ"
+              ${item.status === 'STOCKED' || item.status === 'COMPLETED' ? `
+                <span class="px-2 py-0.5 text-[10px] font-bold text-violet-600 bg-violet-50 rounded-md">เข้าคลังแล้ว</span>
+              ` : ''}
+              <button type="button" onclick="App.openPreorderModal('${id}')" title="แก้ไขรายการ"
                 class="p-1.5 hover:bg-slate-200 text-slate-500 hover:text-indigo-600 rounded-lg transition">
                 <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
               </button>
-              <button type="button" onclick="App.confirmDeletePreorder('${item.id}')" title="ลบรายการ"
+              <button type="button" onclick="App.confirmDeletePreorder('${id}')" title="ลบรายการ"
                 class="p-1.5 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-lg transition">
                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
               </button>
@@ -2831,9 +2843,11 @@ const App = {
     const remainingTotal = list
       .filter(p => p.status === 'WAITING_ARRIVAL' || p.status === 'ARRIVED')
       .reduce((s, p) => {
-        const total = Number(p.totalAmount) || ((Number(p.quantity) || 1) * (Number(p.salePrice) || 0));
+        const unitCost = Number(p.costPrice !== undefined && p.costPrice !== null ? p.costPrice : p.salePrice) || 0;
+        const total = Number(p.totalAmount) || ((Number(p.quantity) || 1) * unitCost);
         const deposit = Number(p.depositAmount) || 0;
-        return s + Math.max(0, total - deposit);
+        const rem = Number(p.remainingAmount !== undefined && p.remainingAmount !== null ? p.remainingAmount : Math.max(0, total - deposit));
+        return s + Math.max(0, rem);
       }, 0);
 
     const elWaitingCount = document.getElementById('kpi-preorder-waiting-count');
@@ -2873,12 +2887,13 @@ const App = {
     if (form) form.reset();
 
     const idInput = document.getElementById('modal-preorder-id');
-    const customerInput = document.getElementById('modal-preorder-customer');
+    const supplierInput = document.getElementById('modal-preorder-supplier') || document.getElementById('modal-preorder-customer');
     const contactInput = document.getElementById('modal-preorder-contact');
     const productInput = document.getElementById('modal-preorder-product-name');
+    const categoryInput = document.getElementById('modal-preorder-category');
     const qtyInput = document.getElementById('modal-preorder-qty');
-    const saleInput = document.getElementById('modal-preorder-saleprice');
     const costInput = document.getElementById('modal-preorder-costprice');
+    const saleInput = document.getElementById('modal-preorder-saleprice');
     const depositInput = document.getElementById('modal-preorder-deposit');
     const remainingInput = document.getElementById('modal-preorder-remaining');
     const etaInput = document.getElementById('modal-preorder-eta');
@@ -2886,28 +2901,31 @@ const App = {
     const trackingInput = document.getElementById('modal-preorder-tracking');
 
     if (id) {
-      const item = (this.preorders || []).find(p => p.id === id);
+      const item = (this.preorders || []).find(p => p.id === id || p.preorderId === id);
       if (item) {
-        if (titleEl) titleEl.textContent = `แก้ไขพรีออเดอร์: ${item.id}`;
-        if (idInput) idInput.value = item.id;
-        if (customerInput) customerInput.value = item.customerName || '';
-        if (contactInput) contactInput.value = item.customerContact || '';
+        if (titleEl) titleEl.textContent = `แก้ไขรายการสั่งของส่ง: ${item.id || item.preorderId}`;
+        if (idInput) idInput.value = item.id || item.preorderId;
+        if (supplierInput) supplierInput.value = item.supplierName || item.customerName || '';
+        if (contactInput) contactInput.value = item.supplierContact || item.customerContact || '';
         if (productInput) productInput.value = item.productName || '';
+        if (categoryInput) categoryInput.value = item.category || 'Art Toy / กล่องสุ่ม';
         if (qtyInput) qtyInput.value = item.quantity || 1;
+        const cVal = (item.costPrice !== undefined && item.costPrice !== null) ? item.costPrice : (item.salePrice || 0);
+        if (costInput) costInput.value = cVal;
         if (saleInput) saleInput.value = item.salePrice || 0;
-        if (costInput) costInput.value = item.costPrice || 0;
         if (depositInput) depositInput.value = item.depositAmount || 0;
-        if (etaInput) etaInput.value = item.expectedArrival || '';
+        if (etaInput) etaInput.value = item.expectedArrival || item.expectedDate || '';
         if (statusSelect) statusSelect.value = item.status || 'WAITING_ARRIVAL';
         if (trackingInput) trackingInput.value = item.trackingNo || item.note || '';
         this.calcPreorderAmounts(true);
       }
     } else {
-      if (titleEl) titleEl.textContent = 'บันทึกพรีออเดอร์สินค้าใหม่';
+      if (titleEl) titleEl.textContent = 'บันทึกสั่งของร้านส่ง (Pre-order)';
       if (idInput) idInput.value = '';
+      if (categoryInput) categoryInput.value = this.categories[0] || 'Art Toy / กล่องสุ่ม';
       if (qtyInput) qtyInput.value = 1;
-      if (saleInput) saleInput.value = 0;
       if (costInput) costInput.value = 0;
+      if (saleInput) saleInput.value = 0;
       if (depositInput) depositInput.value = 0;
       if (remainingInput) remainingInput.value = 0;
       if (statusSelect) statusSelect.value = 'WAITING_ARRIVAL';
@@ -2924,8 +2942,10 @@ const App = {
 
   calcPreorderAmounts(fromDeposit = false) {
     const qty = Math.max(1, Number(document.getElementById('modal-preorder-qty')?.value) || 1);
+    const cost = Math.max(0, Number(document.getElementById('modal-preorder-costprice')?.value) || 0);
     const sale = Math.max(0, Number(document.getElementById('modal-preorder-saleprice')?.value) || 0);
-    const total = qty * sale;
+    const unitPrice = cost > 0 ? cost : sale;
+    const total = qty * unitPrice;
 
     const totalPreview = document.getElementById('modal-preorder-total-preview');
     if (totalPreview) {
@@ -2950,8 +2970,10 @@ const App = {
 
   setPreorderDepositPercent(pct) {
     const qty = Math.max(1, Number(document.getElementById('modal-preorder-qty')?.value) || 1);
+    const cost = Math.max(0, Number(document.getElementById('modal-preorder-costprice')?.value) || 0);
     const sale = Math.max(0, Number(document.getElementById('modal-preorder-saleprice')?.value) || 0);
-    const total = qty * sale;
+    const unitPrice = cost > 0 ? cost : sale;
+    const total = qty * unitPrice;
 
     const depositVal = Math.round((total * (pct / 100)) * 100) / 100;
     const depositInput = document.getElementById('modal-preorder-deposit');
@@ -2965,19 +2987,21 @@ const App = {
     if (this.isSubmittingPreorder) return;
 
     const id = document.getElementById('modal-preorder-id')?.value || null;
-    const customer = document.getElementById('modal-preorder-customer')?.value?.trim();
+    const supplierInput = document.getElementById('modal-preorder-supplier') || document.getElementById('modal-preorder-customer');
+    const supplier = supplierInput?.value?.trim() || '';
     const contact = document.getElementById('modal-preorder-contact')?.value?.trim() || '';
     const product = document.getElementById('modal-preorder-product-name')?.value?.trim();
+    const category = document.getElementById('modal-preorder-category')?.value?.trim() || 'Art Toy / กล่องสุ่ม';
     const qty = Math.max(1, Number(document.getElementById('modal-preorder-qty')?.value) || 1);
-    const sale = Math.max(0, Number(document.getElementById('modal-preorder-saleprice')?.value) || 0);
     const cost = Math.max(0, Number(document.getElementById('modal-preorder-costprice')?.value) || 0);
+    const sale = Math.max(0, Number(document.getElementById('modal-preorder-saleprice')?.value) || 0);
     const deposit = Math.max(0, Number(document.getElementById('modal-preorder-deposit')?.value) || 0);
     const eta = document.getElementById('modal-preorder-eta')?.value || '';
     const status = document.getElementById('modal-preorder-status')?.value || 'WAITING_ARRIVAL';
     const tracking = document.getElementById('modal-preorder-tracking')?.value?.trim() || '';
 
-    if (!customer || !product) {
-      this.showToast('กรุณากรอกชื่อลูกค้าและชื่อสินค้าที่พรีออเดอร์', 'warning');
+    if (!supplier || !product) {
+      this.showToast('กรุณากรอกชื่อร้านขายส่งและชื่อสินค้าที่สั่งจอง', 'warning');
       return;
     }
 
@@ -2993,28 +3017,33 @@ const App = {
 
       const payload = {
         id: id || undefined,
-        customerName: customer,
+        preorderId: id || undefined,
+        supplierName: supplier,
+        customerName: supplier,
+        supplierContact: contact,
         customerContact: contact,
         productName: product,
+        category: category,
         quantity: qty,
-        salePrice: sale,
         costPrice: cost,
+        salePrice: sale > 0 ? sale : (cost > 0 ? Math.round(cost * 1.35) : 0),
         depositAmount: deposit,
         expectedArrival: eta,
+        expectedDate: eta,
         status: status,
         trackingNo: tracking,
         note: tracking
       };
 
       const res = await ApiService.savePreorder(payload);
-      this.showToast(res.message || 'บันทึกข้อมูลพรีออเดอร์สำเร็จ!', 'success');
+      this.showToast(res.message || 'บันทึกข้อมูลสั่งของร้านส่งสำเร็จ!', 'success');
       this.closePreorderModal();
       
       this.preorders = await ApiService.getPreorders();
       this.renderPreorders();
       this.renderPreorderKPIs();
     } catch (err) {
-      this.showToast('ไม่สามารถบันทึกพรีออเดอร์ได้: ' + err.message, 'error');
+      this.showToast('ไม่สามารถบันทึกได้: ' + err.message, 'error');
     } finally {
       this.isSubmittingPreorder = false;
       if (submitBtn) {
@@ -3025,11 +3054,104 @@ const App = {
     }
   },
 
+  async receivePreorderToStock(id) {
+    const item = (this.preorders || []).find(p => p.id === id || p.preorderId === id);
+    if (!item) {
+      this.showToast('ไม่พบรายการสั่งซื้อร้านส่งนี้', 'error');
+      return;
+    }
+
+    if (item.status === 'STOCKED') {
+      this.showToast('รายการนี้รับเข้าสต็อกเรียบร้อยแล้ว', 'info');
+      return;
+    }
+
+    const supplier = item.supplierName || item.customerName || 'ร้านส่ง';
+    const pName = (item.productName || '').trim() || 'สินค้า';
+    const qty = Math.max(1, Number(item.quantity) || 1);
+    const cost = Math.max(0, Number(item.costPrice !== undefined && item.costPrice !== null ? item.costPrice : item.salePrice) || 0);
+    const sale = Math.max(0, Number(item.salePrice) || (cost > 0 ? Math.round(cost * 1.35) : 0));
+    const totalCost = qty * cost;
+
+    const confirmMsg = `ยืนยันการรับสินค้าเข้าสต็อก?\n\n` +
+      `• ร้านส่ง: ${supplier}\n` +
+      `• สินค้า: ${pName}\n` +
+      `• จำนวน: ${qty} ชิ้น\n` +
+      `• ต้นทุนส่ง: ฿${cost.toLocaleString()} / ชิ้น (รวม ฿${totalCost.toLocaleString()})\n\n` +
+      `ระบบจะบันทึกรับเข้าคลัง (IN) อัตโนมัติและปรับสถานะเป็น "รับเข้าสต็อกแล้ว"`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      this.showLoading(true);
+
+      // ตรวจสอบว่ามีสินค้านี้อยู่ในระบบหรือไม่
+      let targetProduct = (this.products || []).find(p => 
+        (item.productId && p.productId === item.productId) ||
+        (p.productName && p.productName.trim().toLowerCase() === pName.toLowerCase())
+      );
+
+      // ถ้ายังไม่มีสินค้าในระบบ ให้สร้างสินค้าใหม่ TOY-xxx อัตโนมัติ
+      if (!targetProduct) {
+        const newId = this.getNextProductId();
+        const newProduct = {
+          productId: newId,
+          productName: pName,
+          category: item.category || this.categories[0] || 'Art Toy / กล่องสุ่ม',
+          costPrice: cost,
+          salePrice: sale,
+          currentStock: 0,
+          minStockAlert: 5,
+          unit: 'ชิ้น',
+          note: `สร้างอัตโนมัติจากการรับพรีออเดอร์ร้านส่ง (${supplier})`
+        };
+        await ApiService.saveProduct(newProduct);
+        this.products.push(newProduct);
+        if (window.appStore && window.appStore.state && window.appStore.state.products) {
+          window.appStore.state.products.push(newProduct);
+        }
+        targetProduct = newProduct;
+      }
+
+      // บันทึก Transaction รับเข้าสต็อก (type: 'IN')
+      const currentUser = (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUser) ? AuthManager.getCurrentUser() : null;
+      const operatorName = currentUser?.name || currentUser?.username || 'ระบบรับพรีออเดอร์';
+
+      const transData = {
+        productId: targetProduct.productId,
+        type: 'IN',
+        quantity: qty,
+        costPrice: cost,
+        salePrice: targetProduct.salePrice || sale,
+        operator: operatorName,
+        note: `รับเข้าจากพรีออเดอร์ร้านส่ง [${item.id || item.preorderId}] ${supplier}${item.trackingNo ? ' (' + item.trackingNo + ')' : ''}`
+      };
+
+      await ApiService.addTransaction(transData);
+
+      // อัปเดตสถานะพรีออเดอร์เป็น STOCKED
+      await ApiService.updatePreorderStatus(item.id || item.preorderId, 'STOCKED');
+
+      this.showToast(`รับสินค้า "${pName}" จำนวน ${qty} ชิ้น เข้าสต็อกเรียบร้อย!`, 'success');
+
+      // รีเฟรชข้อมูลทั้งหมด
+      await this.refreshData();
+      this.preorders = await ApiService.getPreorders();
+      this.renderPreorders();
+      this.renderPreorderKPIs();
+    } catch (err) {
+      console.error('receivePreorderToStock error:', err);
+      this.showToast('เกิดข้อผิดพลาดในการรับเข้าสต็อก: ' + err.message, 'error');
+    } finally {
+      this.showLoading(false);
+    }
+  },
+
   async quickUpdatePreorderStatus(id, newStatus) {
     try {
       this.showLoading(true);
       await ApiService.updatePreorderStatus(id, newStatus);
-      const statusThai = newStatus === 'ARRIVED' ? 'สินค้ามาถึงแล้ว 📦' : newStatus === 'COMPLETED' ? 'ส่งมอบลูกค้าเรียบร้อย 🚚' : newStatus;
+      const statusThai = newStatus === 'ARRIVED' ? 'ของถึงร้านแล้ว 📦' : (newStatus === 'STOCKED' || newStatus === 'COMPLETED') ? 'รับเข้าสต็อกเรียบร้อย ✅' : newStatus;
       this.showToast(`อัปเดตสถานะเป็น "${statusThai}" สำเร็จ`, 'success');
       this.preorders = await ApiService.getPreorders();
       this.renderPreorders();
@@ -3042,11 +3164,11 @@ const App = {
   },
 
   async confirmDeletePreorder(id) {
-    if (!confirm(`คุณต้องการลบรายการพรีออเดอร์ ${id} ใช่หรือไม่?`)) return;
+    if (!confirm(`คุณต้องการลบรายการสั่งของส่ง ${id} ใช่หรือไม่?`)) return;
     try {
       this.showLoading(true);
       await ApiService.deletePreorder(id);
-      this.showToast(`ลบรายการพรีออเดอร์ ${id} เรียบร้อย`, 'success');
+      this.showToast(`ลบรายการสั่งของส่ง ${id} เรียบร้อย`, 'success');
       this.preorders = await ApiService.getPreorders();
       this.renderPreorders();
       this.renderPreorderKPIs();

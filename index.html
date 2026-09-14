@@ -47,7 +47,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Custom Design System CSS -->
-  <link rel="stylesheet" href="styles.css?v=4.0.4">
+  <link rel="stylesheet" href="styles.css?v=4.0.5">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
@@ -136,8 +136,8 @@
           <span>ประวัติรายการ</span>
         </button>
         <button data-tab="preorder" class="nav-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800/60">
-          <i data-lucide="clock" class="w-4 h-4 text-violet-400"></i>
-          <span>พรีออเดอร์ (รอของเข้า)</span>
+          <i data-lucide="package-search" class="w-4 h-4 text-violet-400"></i>
+          <span>สั่งของร้านส่ง (Pre-order)</span>
         </button>
         <button data-tab="settings" class="nav-btn px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800/60">
           <i data-lucide="settings-2" class="w-4 h-4"></i>
@@ -871,7 +871,7 @@
     </section>
 
     <!-- --------------------------------------------------------------------- -->
-    <!-- 5.5 PRE-ORDER MANAGEMENT PAGE (สินค้าที่ต้องรอมาส่ง) -->
+    <!-- 5.5 SUPPLIER PRE-ORDER MANAGEMENT PAGE (สินค้าสั่งจองรอของเข้าจากร้านขายส่ง) -->
     <!-- --------------------------------------------------------------------- -->
     <section id="page-preorder" class="tab-page hidden space-y-6">
       
@@ -879,59 +879,59 @@
       <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 class="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-            <span>ระบบติดตามพรีออเดอร์ (Pre-orders)</span>
-            <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-violet-100 text-violet-700">รอของเข้า / Pop Mart</span>
+            <span>ระบบติดตามสินค้าสั่งจองจากร้านขายส่ง (Inbound Pre-orders)</span>
+            <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-violet-100 text-violet-700">สั่งของร้านส่ง / รอของเข้า</span>
           </h2>
-          <p class="text-xs sm:text-sm text-slate-500 mt-0.5">บันทึกยอดจองสินค้าจากลูกค้า สินค้าที่สั่งรอของเข้า คำนวณมัดจำ และติดตามสถานะพัสดุ</p>
+          <p class="text-xs sm:text-sm text-slate-500 mt-0.5">บันทึกรายการสั่งซื้อล่วงหน้ากับร้านขายส่ง/จีน บันทึกมัดจำที่ร้านจ่าย ติดตามเลขชิปปิ้ง และกดรับเข้าคลังทันทีเมื่อของมาถึง</p>
         </div>
         <div class="flex items-center gap-2">
           <button onclick="App.openPreorderModal()" class="px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-violet-200 flex items-center gap-2 transition active:scale-95">
             <i data-lucide="plus-circle" class="w-4 h-4"></i>
-            <span>+ บันทึกพรีออเดอร์ใหม่</span>
+            <span>+ บันทึกสั่งของร้านส่ง (PO)</span>
           </button>
         </div>
       </div>
 
       <!-- KPI Bento Grid (4 Cards) -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <!-- 1. รอสินค้าเข้า -->
+        <!-- 1. สั่งจองรอของเข้า -->
         <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm relative overflow-hidden">
           <div class="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
-            <span>⏳ รอสินค้าเข้า</span>
-            <span class="p-1.5 bg-amber-50 text-amber-600 rounded-lg"><i data-lucide="clock" class="w-4 h-4"></i></span>
+            <span>⏳ รอส่ง / เดินทาง</span>
+            <span class="p-1.5 bg-amber-50 text-amber-600 rounded-lg"><i data-lucide="truck" class="w-4 h-4"></i></span>
           </div>
           <div class="text-xl sm:text-2xl font-extrabold text-slate-800" id="kpi-preorder-waiting-count">0 รายการ</div>
           <div class="text-xs text-amber-600 font-medium mt-1"><span id="kpi-preorder-waiting-qty">0</span> ชิ้น กำลังเดินทาง</div>
         </div>
 
-        <!-- 2. สินค้ามาถึงแล้ว (พร้อมส่ง) -->
+        <!-- 2. สินค้ามาถึงร้านแล้ว (รอตรวจรับ) -->
         <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm relative overflow-hidden">
           <div class="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
-            <span>📦 สินค้ามาถึงแล้ว</span>
+            <span>📦 สินค้าถึงร้านแล้ว</span>
             <span class="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg"><i data-lucide="package-check" class="w-4 h-4"></i></span>
           </div>
           <div class="text-xl sm:text-2xl font-extrabold text-emerald-600" id="kpi-preorder-arrived-count">0 รายการ</div>
-          <div class="text-xs text-slate-500 font-medium mt-1">พร้อมจัดส่งให้ลูกค้า</div>
+          <div class="text-xs text-slate-500 font-medium mt-1">พร้อมกดรับเข้าสต็อกสินค้า</div>
         </div>
 
-        <!-- 3. เงินมัดจำรับแล้ว -->
+        <!-- 3. เงินมัดจำที่ร้านจ่ายไปแล้ว -->
         <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm relative overflow-hidden">
           <div class="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
-            <span>💰 เงินมัดจำรับแล้ว</span>
+            <span>💸 มัดจำที่ร้านจ่ายแล้ว</span>
             <span class="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg"><i data-lucide="wallet" class="w-4 h-4"></i></span>
           </div>
           <div class="text-xl sm:text-2xl font-extrabold text-indigo-600" id="kpi-preorder-deposit-total">฿0.00</div>
-          <div class="text-xs text-slate-400 font-medium mt-1">เงินสดเข้าบัญชีแล้ว</div>
+          <div class="text-xs text-slate-400 font-medium mt-1">เงินสดที่ร้านเราโอนจ่ายไปแล้ว</div>
         </div>
 
-        <!-- 4. ยอดค้างชำระรอเก็บ -->
+        <!-- 4. ยอดคงเหลือต้องจ่ายเพิ่ม -->
         <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm relative overflow-hidden">
           <div class="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
-            <span>⏳ ค้างชำระรอเก็บ</span>
+            <span>⏳ ยอดค้างจ่ายร้านส่ง</span>
             <span class="p-1.5 bg-rose-50 text-rose-600 rounded-lg"><i data-lucide="receipt" class="w-4 h-4"></i></span>
           </div>
           <div class="text-xl sm:text-2xl font-extrabold text-rose-600" id="kpi-preorder-remaining-total">฿0.00</div>
-          <div class="text-xs text-slate-400 font-medium mt-1">รอเก็บตอนของส่งถึง</div>
+          <div class="text-xs text-slate-400 font-medium mt-1">จ่ายเพิ่มให้ร้านส่งเมื่อรับของ</div>
         </div>
       </div>
 
@@ -942,7 +942,7 @@
           <div class="relative flex-1">
             <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
             <input type="text" id="preorder-search-input" oninput="App.handlePreorderSearch(this.value)"
-              placeholder="ค้นหาชื่อลูกค้า, เบอร์โทร, สินค้า หรือ รหัสพรีออเดอร์..."
+              placeholder="ค้นหาชื่อร้านส่ง, ซัพพลายเออร์, สินค้า, หรือเลขพัสดุชิปปิ้ง..."
               class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-violet-500 focus:outline-none focus:bg-white transition">
           </div>
 
@@ -952,16 +952,16 @@
               ทั้งหมด
             </button>
             <button onclick="App.filterPreorders('WAITING_ARRIVAL')" data-status="WAITING_ARRIVAL" class="preorder-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
-              ⏳ รอสินค้าเข้า
+              ⏳ รอของเข้า
             </button>
             <button onclick="App.filterPreorders('ARRIVED')" data-status="ARRIVED" class="preorder-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
-              📦 สินค้ามาถึงแล้ว
+              📦 ของถึงร้านแล้ว
             </button>
-            <button onclick="App.filterPreorders('COMPLETED')" data-status="COMPLETED" class="preorder-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
-              🚚 ส่งมอบแล้ว
+            <button onclick="App.filterPreorders('STOCKED')" data-status="STOCKED" class="preorder-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+              ✅ นำเข้าสต็อกแล้ว
             </button>
             <button onclick="App.filterPreorders('CANCELLED')" data-status="CANCELLED" class="preorder-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
-              ❌ ยกเลิก
+              ❌ ยกเลิกสั่งซื้อ
             </button>
           </div>
         </div>
@@ -973,14 +973,14 @@
           <table class="w-full text-left text-xs">
             <thead class="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
               <tr>
-                <th class="px-4 py-3.5">รหัสจอง</th>
-                <th class="px-4 py-3.5">ลูกค้า / ช่องทางติดต่อ</th>
-                <th class="px-4 py-3.5">สินค้าที่พรีออเดอร์</th>
-                <th class="px-4 py-3.5 text-center">จำนวน</th>
-                <th class="px-4 py-3.5 text-right">ยอดรวม (฿)</th>
-                <th class="px-4 py-3.5 text-right">มัดจำแล้ว (฿)</th>
-                <th class="px-4 py-3.5 text-right">คงเหลือรอเก็บ (฿)</th>
-                <th class="px-4 py-3.5 text-center">กำหนดถึง / แท็กกิ้ง</th>
+                <th class="px-4 py-3.5">รหัสสั่งซื้อ (PO)</th>
+                <th class="px-4 py-3.5">ร้านขายส่ง / ซัพพลายเออร์</th>
+                <th class="px-4 py-3.5">สินค้าที่สั่งจอง</th>
+                <th class="px-4 py-3.5 text-center">จำนวนสั่ง</th>
+                <th class="px-4 py-3.5 text-right">ยอดรวมส่ง (฿)</th>
+                <th class="px-4 py-3.5 text-right">มัดจำที่จ่ายแล้ว (฿)</th>
+                <th class="px-4 py-3.5 text-right">ค้างจ่ายร้านส่ง (฿)</th>
+                <th class="px-4 py-3.5 text-center">กำหนดถึง / เลขชิปปิ้ง</th>
                 <th class="px-4 py-3.5 text-center">สถานะ</th>
                 <th class="px-4 py-3.5 text-center">จัดการ</th>
               </tr>
@@ -1178,8 +1178,8 @@
       <div class="mobile-tab-indicator w-3 h-0.5 bg-indigo-600 rounded-full mt-0.5 opacity-0 transition-all"></div>
     </button>
     <button data-tab="preorder" class="mobile-nav-btn flex flex-col items-center justify-center flex-1 py-1 text-slate-400">
-      <i data-lucide="clock" class="w-5 h-5"></i>
-      <span class="text-[10px] mt-0.5 font-medium">พรีออเดอร์</span>
+      <i data-lucide="package-search" class="w-5 h-5"></i>
+      <span class="text-[10px] mt-0.5 font-medium">สั่งของส่ง</span>
       <div class="mobile-tab-indicator w-3 h-0.5 bg-indigo-600 rounded-full mt-0.5 opacity-0 transition-all"></div>
     </button>
     <button data-tab="settings" class="mobile-nav-btn flex flex-col items-center justify-center flex-1 py-1 text-slate-400">
@@ -1659,11 +1659,11 @@
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center text-lg font-bold">
-            <i data-lucide="clock" class="w-5 h-5"></i>
+            <i data-lucide="truck" class="w-5 h-5"></i>
           </div>
           <div>
-            <h3 id="modal-preorder-title" class="font-extrabold text-slate-900 text-base sm:text-lg">บันทึกพรีออเดอร์สินค้า</h3>
-            <p class="text-xs text-slate-500">บันทึกข้อมูลลูกค้า สินค้ารอของเข้า และคำนวณเงินมัดจำ</p>
+            <h3 id="modal-preorder-title" class="font-extrabold text-slate-900 text-base sm:text-lg">บันทึกสั่งของร้านส่ง (Pre-order)</h3>
+            <p class="text-xs text-slate-500">บันทึกรายการที่ร้านเราสั่งจองกับร้านขายส่ง/ชิปปิ้ง คำนวณมัดจำและยอดค้างจ่าย</p>
           </div>
         </div>
         <button onclick="App.closePreorderModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 text-lg font-bold flex items-center justify-center transition">&times;</button>
@@ -1673,103 +1673,113 @@
       <form id="preorder-form" onsubmit="event.preventDefault(); App.savePreorderFromModal();" class="space-y-3.5 text-xs">
         <input type="hidden" id="modal-preorder-id">
 
-        <!-- Customer Name & Contact -->
+        <!-- Supplier Name & Contact -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block font-bold text-slate-700 mb-1">ชื่อลูกค้าผู้จอง *</label>
-            <input type="text" id="modal-preorder-customer" required placeholder="เช่น คุณพลอย / บีม"
+            <label class="block font-bold text-slate-700 mb-1">ร้านขายส่ง / ซัพพลายเออร์ *</label>
+            <input type="text" id="modal-preorder-supplier" required placeholder="เช่น Pop Mart Official / ร้านส่งสำเพ็ง เฮียเกียรติ"
               class="w-full p-2.5 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">เบอร์โทร / LINE / IG ติดต่อ</label>
-            <input type="text" id="modal-preorder-contact" placeholder="เช่น 081-xxx-xxxx / @ploy_toys"
+            <label class="block font-bold text-slate-700 mb-1">เบอร์โทร / LINE / WeChat ติดต่อ</label>
+            <input type="text" id="modal-preorder-contact" placeholder="เช่น 081-xxx-xxxx / WeChat: popmart_b2b"
               class="w-full p-2.5 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
           </div>
         </div>
 
-        <!-- Product Name -->
-        <div>
-          <label class="block font-bold text-slate-700 mb-1">ชื่อสินค้าที่พรีออเดอร์ *</label>
-          <input type="text" id="modal-preorder-product-name" required placeholder="เช่น Molly Space 100% v3 (ยกบ็อกซ์)"
-            class="w-full p-2.5 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
+        <!-- Product Name & Category -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="sm:col-span-2">
+            <label class="block font-bold text-slate-700 mb-1">ชื่อสินค้าที่สั่งจอง *</label>
+            <input type="text" id="modal-preorder-product-name" required placeholder="เช่น Crybaby Sunset Concert Series (ยกกล่อง)"
+              class="w-full p-2.5 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">หมวดหมู่</label>
+            <input type="text" id="modal-preorder-category" placeholder="เช่น กล่องสุ่ม" value="Art Toy / กล่องสุ่ม"
+              class="w-full p-2.5 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
+          </div>
         </div>
 
         <!-- Quantity, Cost, Sale Price -->
         <div class="grid grid-cols-3 gap-2 sm:gap-3">
           <div>
-            <label class="block font-bold text-slate-700 mb-1">จำนวน (ชิ้น) *</label>
+            <label class="block font-bold text-slate-700 mb-1">จำนวนสั่งจอง (ชิ้น) *</label>
             <input type="number" id="modal-preorder-qty" min="1" step="1" value="1" required oninput="App.calcPreorderAmounts()"
               class="w-full p-2.5 border border-slate-200 rounded-xl font-bold text-slate-800 text-center focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">ราคาขาย/ชิ้น (฿) *</label>
-            <input type="number" id="modal-preorder-saleprice" min="0" step="0.01" value="0" required oninput="App.calcPreorderAmounts()"
-              class="w-full p-2.5 border border-slate-200 rounded-xl font-bold text-indigo-600 text-right focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
+            <label class="block font-bold text-slate-700 mb-1">ต้นทุนส่ง/ชิ้น (฿) *</label>
+            <input type="number" id="modal-preorder-costprice" min="0" step="0.01" value="0" required oninput="App.calcPreorderAmounts()"
+              class="w-full p-2.5 border border-slate-200 rounded-xl font-bold text-rose-600 text-right focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">ต้นทุน/ชิ้น (฿)</label>
-            <input type="number" id="modal-preorder-costprice" min="0" step="0.01" value="0"
-              class="w-full p-2.5 border border-slate-200 rounded-xl font-medium text-slate-600 text-right focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
+            <label class="block font-bold text-slate-700 mb-1">ราคาขายหน้าร้าน (฿)</label>
+            <input type="number" id="modal-preorder-saleprice" min="0" step="0.01" value="0" oninput="App.calcPreorderAmounts()"
+              class="w-full p-2.5 border border-slate-200 rounded-xl font-medium text-emerald-600 text-right focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
           </div>
         </div>
 
         <!-- Deposit & Calculations Card -->
         <div class="bg-violet-50/60 p-3.5 rounded-2xl border border-violet-100 space-y-2.5">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-slate-700">ยอดขายรวมทั้งหมด:</span>
+            <span class="font-bold text-slate-700">มูลค่าสั่งซื้อรวม (จำนวน x ต้นทุนส่ง):</span>
             <span id="modal-preorder-total-preview" class="font-extrabold text-indigo-600 text-sm">฿0.00</span>
           </div>
 
           <!-- Quick Deposit Buttons -->
-          <div class="flex items-center gap-1.5">
-            <span class="text-[11px] font-bold text-slate-500">เลือกอัตรามัดจำ:</span>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-[11px] font-bold text-slate-500">มัดจำที่ร้านจ่าย:</span>
+            <button type="button" onclick="App.setPreorderDepositPercent(30)" class="px-2.5 py-1 bg-white hover:bg-violet-600 hover:text-white border border-violet-200 text-violet-700 rounded-lg text-[11px] font-bold transition shadow-xs">
+              มัดจำ 30%
+            </button>
             <button type="button" onclick="App.setPreorderDepositPercent(50)" class="px-2.5 py-1 bg-white hover:bg-violet-600 hover:text-white border border-violet-200 text-violet-700 rounded-lg text-[11px] font-bold transition shadow-xs">
               มัดจำ 50%
             </button>
             <button type="button" onclick="App.setPreorderDepositPercent(100)" class="px-2.5 py-1 bg-white hover:bg-violet-600 hover:text-white border border-violet-200 text-violet-700 rounded-lg text-[11px] font-bold transition shadow-xs">
-              เต็มจำนวน 100%
+              จ่ายเต็ม 100%
             </button>
             <button type="button" onclick="App.setPreorderDepositPercent(0)" class="px-2.5 py-1 bg-white hover:bg-slate-200 border border-slate-200 text-slate-600 rounded-lg text-[11px] font-bold transition shadow-xs">
-              ไม่มัดจำ (0%)
+              ยังไม่มัดจำ (0%)
             </button>
           </div>
 
           <div class="grid grid-cols-2 gap-3 pt-1">
             <div>
-              <label class="block font-bold text-emerald-700 mb-1">ยอดเงินมัดจำที่รับแล้ว (฿) *</label>
+              <label class="block font-bold text-emerald-700 mb-1">เงินมัดจำที่ร้านจ่ายแล้ว (฿) *</label>
               <input type="number" id="modal-preorder-deposit" min="0" step="0.01" value="0" required oninput="App.calcPreorderAmounts(true)"
                 class="w-full p-2.5 bg-white border border-emerald-300 rounded-xl font-extrabold text-emerald-600 text-right focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:outline-none">
             </div>
             <div>
-              <label class="block font-bold text-rose-700 mb-1">ยอดคงเหลือรอเก็บปลายทาง (฿)</label>
+              <label class="block font-bold text-rose-700 mb-1">ยอดค้างจ่ายร้านส่งเมื่อของถึง (฿)</label>
               <input type="number" id="modal-preorder-remaining" readonly value="0"
                 class="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-extrabold text-rose-600 text-right focus:outline-none cursor-not-allowed">
             </div>
           </div>
         </div>
 
-        <!-- Expected Arrival & Tracking / Note -->
+        <!-- Expected Arrival & Status -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="block font-bold text-slate-700 mb-1">วันที่คาดว่าของจะถึง (ETA)</label>
+            <label class="block font-bold text-slate-700 mb-1">กำหนดสินค้าถึงร้าน (ETA)</label>
             <input type="date" id="modal-preorder-eta"
               class="w-full p-2.5 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">สถานะพรีออเดอร์</label>
+            <label class="block font-bold text-slate-700 mb-1">สถานะคำสั่งซื้อส่ง</label>
             <select id="modal-preorder-status"
               class="w-full p-2.5 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none bg-white">
-              <option value="WAITING_ARRIVAL">⏳ รอสินค้าเข้า (Waiting)</option>
-              <option value="ARRIVED">📦 สินค้ามาถึงแล้ว (Arrived)</option>
-              <option value="COMPLETED">🚚 ส่งมอบลูกค้าแล้ว (Completed)</option>
-              <option value="CANCELLED">❌ ยกเลิกรายการ (Cancelled)</option>
+              <option value="WAITING_ARRIVAL">⏳ สั่งจองแล้ว รอของเข้า (Waiting)</option>
+              <option value="ARRIVED">📦 ของถึงร้านแล้ว รอตรวจรับ (Arrived)</option>
+              <option value="STOCKED">✅ รับเข้าสต็อกเรียบร้อย (Stocked)</option>
+              <option value="CANCELLED">❌ ยกเลิกคำสั่งซื้อ (Cancelled)</option>
             </select>
           </div>
         </div>
 
         <div>
-          <label class="block font-bold text-slate-700 mb-1">เลขพัสดุจีน / โน้ตเพิ่มเติม</label>
-          <input type="text" id="modal-preorder-tracking" placeholder="เช่น SF Express #772910, กล่องมุมบุบนิดหน่อย"
+          <label class="block font-bold text-slate-700 mb-1">เลขพัสดุชิปปิ้ง / ขนส่ง / โน้ตเพิ่มเติม</label>
+          <input type="text" id="modal-preorder-tracking" placeholder="เช่น ชิปปิ้ง T-Express ตู้ 88, SF Express #SF19283746"
             class="w-full p-2.5 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:outline-none">
         </div>
 
@@ -1824,14 +1834,14 @@
   </div>
 
   <!-- Application Scripts with Version Cache-Busting -->
-  <script src="config.js?v=4.0.4"></script>
-  <script src="auth.js?v=4.0.4"></script>
-  <script src="api.js?v=4.0.4"></script>
-  <script src="store.js?v=4.0.4"></script>
-  <script src="optimistic.js?v=4.0.4"></script>
-  <script src="scanner.js?v=4.0.4"></script>
-  <script src="reports.js?v=4.0.4"></script>
-  <script src="app.js?v=4.0.4"></script>
+  <script src="config.js?v=4.0.5"></script>
+  <script src="auth.js?v=4.0.5"></script>
+  <script src="api.js?v=4.0.5"></script>
+  <script src="store.js?v=4.0.5"></script>
+  <script src="optimistic.js?v=4.0.5"></script>
+  <script src="scanner.js?v=4.0.5"></script>
+  <script src="reports.js?v=4.0.5"></script>
+  <script src="app.js?v=4.0.5"></script>
 
   <!-- PWA Service Worker Registration & Auto-Update Lifecycle -->
   <script>

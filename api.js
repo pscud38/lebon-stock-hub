@@ -2272,7 +2272,7 @@ const ApiService = {
 
     item.status = newStatus;
     item.lastUpdated = new Date().toISOString();
-    if (newStatus === 'COMPLETED') {
+    if (newStatus === 'COMPLETED' || newStatus === 'STOCKED') {
       item.remainingAmount = 0;
       item.depositAmount = item.totalAmount;
     }
@@ -2300,9 +2300,16 @@ const ApiService = {
       }
     }
 
+    const statusThaiMap = {
+      'WAITING_ARRIVAL': 'รอของเข้า ⏳',
+      'ARRIVED': 'ของถึงร้านแล้ว 📦',
+      'STOCKED': 'รับเข้าสต็อกเรียบร้อย ✅',
+      'CANCELLED': 'ยกเลิกรายการ ❌'
+    };
+
     return {
       success: true,
-      message: `เปลี่ยนสถานะรายการจองเป็น ${newStatus} แล้ว`,
+      message: `เปลี่ยนสถานะเป็น ${statusThaiMap[newStatus] || newStatus} แล้ว`,
       preorder: item
     };
   },
