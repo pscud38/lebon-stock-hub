@@ -18,6 +18,10 @@ const App = {
   deferredPrompt: null, // PWA Install prompt event
   batchRows: [], // รายการในโมดอลรับเข้าล็อตใหญ่
   batchReceiptBase64: null, // รูปใบเสร็จบิลรวม
+  preorders: [], // รายการสินค้าพรีออเดอร์ (รอของเข้า)
+  preorderFilterStatus: 'ALL',
+  preorderSearchKeyword: '',
+  isSubmittingPreorder: false,
 
   async init() {
     this.bindAuth();
@@ -83,6 +87,15 @@ const App = {
         this.updateMyAccountInfo();
         AuthManager.checkAuthAndApplyUI();
         this.refreshIcons();
+      }
+
+      try {
+        const rawPre = localStorage.getItem(CONFIG?.STORAGE_KEYS?.PREORDERS || 'stock_local_preorders');
+        this.preorders = rawPre ? JSON.parse(rawPre) : (CONFIG?.DEFAULT_PREORDERS || []);
+        this.renderPreorders();
+        this.renderPreorderKPIs();
+      } catch (err) {
+        console.warn('Cached preorders error:', err);
       }
     } catch (e) {
       console.warn('Cached data render error:', e);
@@ -198,6 +211,11 @@ const App = {
       ReportsManager.renderReport();
     }
 
+    if (tab === 'preorder') {
+      this.renderPreorders();
+      this.renderPreorderKPIs();
+    }
+
     if (tab === 'settings') {
       this.renderUsersTable();
       this.updateMyAccountInfo();
@@ -232,6 +250,15 @@ const App = {
       this.renderUsersTable();
       this.populateCategoryDropdowns();
       this.updateMyAccountInfo();
+
+      try {
+        this.preorders = await ApiService.getPreorders();
+      } catch (err) {
+        console.warn('Preorders refresh error:', err);
+      }
+      this.renderPreorders();
+      this.renderPreorderKPIs();
+
       AuthManager.checkAuthAndApplyUI();
       this.refreshIcons();
     } catch (err) {
@@ -1094,8 +1121,6 @@ const App = {
         this.calculatePosLiveProfit();
       });
     });
-
-    document.getElementById('pos-submit-btn')?.addEventListener('click', () => this.submitPosTransaction());
   },
 
   /**
@@ -1471,6 +1496,16 @@ const App = {
   },
 
   async submitPosTransaction() {
+    if (this.isSubmittingPos) {
+      console.warn('[POS] Transaction submission already in progress, ignoring duplicate trigger.');
+      return;
+    }
+    const now = Date.now();
+    if (this.lastPosSubmitTime && (now - this.lastPosSubmitTime) < 1000) {
+      console.warn('[POS] Rapid click detected within 1000ms, ignoring duplicate trigger.');
+      return;
+    }
+
     const user = AuthManager.getCurrentUser();
     const productId = document.getElementById('pos-product-select')?.value;
     const type = document.getElementById('pos-type-select')?.value;
@@ -1498,6 +1533,18 @@ const App = {
     }
 
     const product = this.products.find(p => p.productId === productId);
+
+    this.isSubmittingPos = true;
+    this.lastPosSubmitTime = now;
+
+    const submitBtn = document.getElementById('pos-submit-btn');
+    let originalHtml = '';
+    if (submitBtn) {
+      originalHtml = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+      submitBtn.innerHTML = '<div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block"></div> <span>กำลังบันทึกข้อมูล...</span>';
+    }
 
     try {
       if (type === 'OUT' && typeof OptimisticEngine !== 'undefined') {
@@ -1549,14 +1596,15 @@ const App = {
       const summaryText = `${typeLabel} ${qty} ชิ้น: [${prodId}] ${prodName} เรียบร้อยแล้ว`;
 
       // แสดงการตอบรับทางสายตาที่ปุ่มบันทึก (Button Visual Feedback)
-      const submitBtn = document.getElementById('pos-submit-btn');
       if (submitBtn) {
-        const originalHtml = submitBtn.innerHTML;
+        submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
         submitBtn.classList.add('btn-success');
         submitBtn.innerHTML = '<span>🎉</span> บันทึกสำเร็จเรียบร้อย!';
         setTimeout(() => {
           submitBtn.classList.remove('btn-success');
-          submitBtn.innerHTML = originalHtml;
+          if (originalHtml) submitBtn.innerHTML = originalHtml;
+          this.renderPosReasonPills(document.getElementById('pos-type-select')?.value || 'OUT');
+          submitBtn.disabled = false;
         }, 1200);
       }
 
@@ -1568,8 +1616,19 @@ const App = {
       this.updateSyncUI();
     } catch (err) {
       this.showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-75', 'cursor-not-allowed', 'btn-success');
+        if (originalHtml) submitBtn.innerHTML = originalHtml;
+      }
     } finally {
       this.showLoading(false);
+      this.isSubmittingPos = false;
+      if (submitBtn && !submitBtn.classList.contains('btn-success')) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+        if (originalHtml && !submitBtn.innerHTML.includes('🎉')) submitBtn.innerHTML = originalHtml;
+      }
     }
   },
 
@@ -1768,6 +1827,8 @@ const App = {
   },
 
   async saveProductFromModal() {
+    if (this.isSubmittingProduct) return;
+
     const productId = document.getElementById('modal-product-id').value.trim();
     const productName = document.getElementById('modal-product-name').value.trim();
     const category = document.getElementById('modal-product-category').value.trim();
@@ -1807,8 +1868,14 @@ const App = {
 
     const existingProduct = isEdit ? this.products.find(p => p.productId.toLowerCase() === productId.toLowerCase()) : null;
     const isStockChanged = existingProduct && existingProduct.currentStock !== initialStock;
+    const submitBtn = document.getElementById('btn-save-product');
 
     try {
+      this.isSubmittingProduct = true;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+      }
       this.showLoading(true);
       const res = await ApiService.saveProduct({
         productId,
@@ -1853,6 +1920,11 @@ const App = {
     } catch (err) {
       this.showToast('เกิดข้อผิดพลาด: ' + err.message, 'error');
     } finally {
+      this.isSubmittingProduct = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+      }
       this.showLoading(false);
     }
   },
@@ -2018,6 +2090,8 @@ const App = {
   },
 
   async saveTransactionFromModal() {
+    if (this.isSubmittingEditTx) return;
+
     const transId = document.getElementById('modal-trans-id')?.value;
     const productId = document.getElementById('modal-trans-hidden-product-id')?.value;
     const timestampVal = document.getElementById('modal-trans-timestamp')?.value;
@@ -2038,8 +2112,14 @@ const App = {
     }
 
     const timestamp = timestampVal ? new Date(timestampVal).toISOString() : new Date().toISOString();
+    const submitBtn = document.getElementById('btn-save-edit-transaction');
 
     try {
+      this.isSubmittingEditTx = true;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+      }
       this.showLoading(true);
       const res = await ApiService.updateTransaction({
         transId,
@@ -2075,6 +2155,11 @@ const App = {
     } catch (err) {
       this.showToast('แก้ไขไม่สำเร็จ: ' + err.message, 'error');
     } finally {
+      this.isSubmittingEditTx = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+      }
       this.showLoading(false);
     }
   },
@@ -2301,30 +2386,48 @@ const App = {
 
     // เริ่มต้นให้มี 3 แถวเพื่อความสะดวกในการกรอก
     this.batchRows = [
-      { productId: '', qty: 1, costPrice: 0 },
-      { productId: '', qty: 1, costPrice: 0 },
-      { productId: '', qty: 1, costPrice: 0 }
+      { isNewProduct: false, productId: '', newProductName: '', newCategory: 'Art Toy / กล่องสุ่ม', newSalePrice: 0, qty: 1, costPrice: 0 },
+      { isNewProduct: false, productId: '', newProductName: '', newCategory: 'Art Toy / กล่องสุ่ม', newSalePrice: 0, qty: 1, costPrice: 0 },
+      { isNewProduct: false, productId: '', newProductName: '', newCategory: 'Art Toy / กล่องสุ่ม', newSalePrice: 0, qty: 1, costPrice: 0 }
     ];
     this.renderBatchRows();
     document.getElementById('batch-in-modal')?.classList.remove('hidden');
+    this.refreshIcons();
   },
 
   closeBatchInModal() {
     document.getElementById('batch-in-modal')?.classList.add('hidden');
   },
 
-  addBatchRow() {
-    this.batchRows.push({ productId: '', qty: 1, costPrice: 0 });
+  addBatchRow(isNew = false) {
+    this.batchRows.push({
+      isNewProduct: Boolean(isNew),
+      productId: '',
+      newProductName: '',
+      newCategory: this.categories[0] || 'Art Toy / กล่องสุ่ม',
+      newSalePrice: 0,
+      qty: 1,
+      costPrice: 0
+    });
     this.renderBatchRows();
+    this.refreshIcons();
+  },
+
+  toggleBatchRowMode(index) {
+    if (!this.batchRows[index]) return;
+    this.batchRows[index].isNewProduct = !this.batchRows[index].isNewProduct;
+    this.renderBatchRows();
+    this.refreshIcons();
   },
 
   removeBatchRow(index) {
     if (this.batchRows.length <= 1) {
-      this.batchRows = [{ productId: '', qty: 1, costPrice: 0 }];
+      this.batchRows = [{ isNewProduct: false, productId: '', newProductName: '', newCategory: 'Art Toy / กล่องสุ่ม', newSalePrice: 0, qty: 1, costPrice: 0 }];
     } else {
       this.batchRows.splice(index, 1);
     }
     this.renderBatchRows();
+    this.refreshIcons();
   },
 
   updateBatchRow(index, field, value) {
@@ -2341,6 +2444,12 @@ const App = {
       this.batchRows[index].qty = Math.max(1, Number(value) || 1);
     } else if (field === 'costPrice') {
       this.batchRows[index].costPrice = Math.max(0, Number(value) || 0);
+    } else if (field === 'newProductName') {
+      this.batchRows[index].newProductName = value;
+    } else if (field === 'newCategory') {
+      this.batchRows[index].newCategory = value;
+    } else if (field === 'newSalePrice') {
+      this.batchRows[index].newSalePrice = Math.max(0, Number(value) || 0);
     }
 
     const row = this.batchRows[index];
@@ -2359,19 +2468,57 @@ const App = {
 
     container.innerHTML = this.batchRows.map((row, idx) => {
       const subtotal = (row.qty || 0) * (row.costPrice || 0);
+      const isNew = Boolean(row.isNewProduct);
+
       return `
-        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 p-2.5 bg-slate-50 hover:bg-indigo-50/30 rounded-xl border border-slate-200/80 items-center text-xs transition">
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 p-2.5 ${isNew ? 'bg-violet-50/40 border-violet-200' : 'bg-slate-50 border-slate-200/80'} hover:bg-indigo-50/30 rounded-xl border items-center text-xs transition">
           <div class="col-span-12 sm:col-span-5">
-            <label class="block sm:hidden text-[10px] font-bold text-slate-500 mb-0.5">สินค้า:</label>
-            <select id="batch-product-${idx}" onchange="App.updateBatchRow(${idx}, 'productId', this.value)"
-              class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-              <option value="">-- เลือกสินค้า --</option>
-              ${this.products.map(p => `
-                <option value="${p.productId}" ${p.productId === row.productId ? 'selected' : ''}>
-                  ${p.productId} — ${p.productName} (สต็อก: ${p.currentStock})
-                </option>
-              `).join('')}
-            </select>
+            ${isNew ? `
+              <div class="space-y-1">
+                <div class="flex items-center justify-between">
+                  <span class="inline-flex items-center gap-1 text-[11px] font-bold text-violet-700 bg-violet-100 px-2 py-0.5 rounded-md">
+                    ✨ สินค้าใหม่ (จะสร้างรหัส TOY-xxx)
+                  </span>
+                  <button type="button" onclick="App.toggleBatchRowMode(${idx})" class="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold underline">
+                    เลือกสินค้าเดิมแทน
+                  </button>
+                </div>
+                <input type="text" id="batch-name-${idx}" value="${row.newProductName || ''}"
+                  oninput="App.updateBatchRow(${idx}, 'newProductName', this.value)"
+                  placeholder="ระบุชื่อสินค้าใหม่ * (เช่น Skullpanda)"
+                  class="w-full p-2 bg-white border border-violet-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-violet-500 focus:outline-none">
+                <div class="grid grid-cols-2 gap-1.5">
+                  <select id="batch-category-${idx}" onchange="App.updateBatchRow(${idx}, 'newCategory', this.value)"
+                    class="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-[11px] font-medium focus:ring-2 focus:ring-violet-500 focus:outline-none">
+                    ${(this.categories && this.categories.length ? this.categories : ['Art Toy / กล่องสุ่ม', 'Squishy / สกุชชี่', 'โมเดล / ฟิกเกอร์', 'ของสะสมทั่วไป']).map(c => `
+                      <option value="${c}" ${c === (row.newCategory || 'Art Toy / กล่องสุ่ม') ? 'selected' : ''}>${c}</option>
+                    `).join('')}
+                  </select>
+                  <input type="number" min="0" step="0.01" value="${row.newSalePrice || ''}" id="batch-sale-${idx}"
+                    oninput="App.updateBatchRow(${idx}, 'newSalePrice', this.value)"
+                    placeholder="ราคาขายแนะนำ (฿)"
+                    class="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-[11px] text-right font-medium focus:ring-2 focus:ring-violet-500 focus:outline-none">
+                </div>
+              </div>
+            ` : `
+              <div class="space-y-1">
+                <div class="flex items-center justify-between">
+                  <label class="text-[10px] font-bold text-slate-500">เลือกสินค้าเดิม:</label>
+                  <button type="button" onclick="App.toggleBatchRowMode(${idx})" class="text-[10px] text-violet-600 hover:text-violet-800 font-bold hover:underline">
+                    ✨ หรือสร้างเป็นสินค้าใหม่
+                  </button>
+                </div>
+                <select id="batch-product-${idx}" onchange="App.updateBatchRow(${idx}, 'productId', this.value)"
+                  class="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                  <option value="">-- เลือกสินค้าเดิมในคลัง --</option>
+                  ${this.products.map(p => `
+                    <option value="${p.productId}" ${p.productId === row.productId ? 'selected' : ''}>
+                      ${p.productId} — ${p.productName} (สต็อก: ${p.currentStock})
+                    </option>
+                  `).join('')}
+                </select>
+              </div>
+            `}
           </div>
 
           <div class="col-span-6 sm:col-span-2">
@@ -2409,7 +2556,12 @@ const App = {
   },
 
   updateBatchSummary() {
-    const validRows = this.batchRows.filter(r => r.productId && r.qty > 0);
+    const validRows = this.batchRows.filter(r => {
+      if (r.isNewProduct) {
+        return r.newProductName && r.newProductName.trim() && Number(r.qty) > 0;
+      }
+      return r.productId && Number(r.qty) > 0;
+    });
     const totalItems = validRows.length;
     const totalQty = validRows.reduce((sum, r) => sum + (Number(r.qty) || 0), 0);
     const totalCost = validRows.reduce((sum, r) => sum + ((Number(r.qty) || 0) * (Number(r.costPrice) || 0)), 0);
@@ -2457,9 +2609,17 @@ const App = {
   },
 
   async submitBatchInTransaction() {
-    const validRows = this.batchRows.filter(r => r.productId && Number(r.qty) > 0);
+    if (this.isSubmittingBatch) return;
+
+    const validRows = this.batchRows.filter(r => {
+      if (r.isNewProduct) {
+        return r.newProductName && r.newProductName.trim() && Number(r.qty) > 0;
+      }
+      return r.productId && Number(r.qty) > 0;
+    });
+
     if (validRows.length === 0) {
-      this.showToast('กรุณาเลือกสินค้าและระบุจำนวนอย่างน้อย 1 รายการ', 'warning');
+      this.showToast('กรุณาระบุชื่อสินค้าหรือเลือกสินค้า และจำนวนรับอย่างน้อย 1 รายการ', 'warning');
       return;
     }
 
@@ -2467,15 +2627,48 @@ const App = {
     const user = AuthManager.getCurrentUser();
     const operator = (user ? user.fullName || user.username : 'Admin');
     const role = (user && user.role) ? user.role : 'admin';
-
-    const items = validRows.map(r => ({
-      productId: r.productId,
-      quantity: Number(r.qty),
-      costPrice: Number(r.costPrice) || 0
-    }));
+    const submitBtn = document.getElementById('btn-submit-batch-in');
 
     try {
+      this.isSubmittingBatch = true;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+      }
       this.showLoading(true);
+
+      // สร้างสินค้าใหม่อัตโนมัติสำหรับแถวที่ระบุเป็นสินค้าใหม่
+      for (const r of validRows) {
+        if (r.isNewProduct && !r.productId) {
+          const newId = this.getNextProductId();
+          const cost = Number(r.costPrice) || 0;
+          const sale = Number(r.newSalePrice) || (cost > 0 ? Math.round(cost * 1.35) : 0);
+          const newProduct = {
+            productId: newId,
+            productName: r.newProductName.trim(),
+            category: r.newCategory || this.categories[0] || 'Art Toy / กล่องสุ่ม',
+            costPrice: cost,
+            salePrice: sale,
+            currentStock: 0,
+            minStockAlert: 5,
+            unit: 'ชิ้น',
+            note: 'สร้างอัตโนมัติจากการรับเข้าล็อตใหญ่'
+          };
+          await ApiService.saveProduct(newProduct);
+          this.products.push(newProduct);
+          if (window.appStore && window.appStore.state && window.appStore.state.products) {
+            window.appStore.state.products.push(newProduct);
+          }
+          r.productId = newId;
+        }
+      }
+
+      const items = validRows.map(r => ({
+        productId: r.productId,
+        quantity: Number(r.qty),
+        costPrice: Number(r.costPrice) || 0
+      }));
+
       const res = await ApiService.batchAddTransactions({
         items: items,
         invoiceNote: note,
@@ -2490,6 +2683,375 @@ const App = {
       await this.refreshData();
     } catch (err) {
       this.showToast('เกิดข้อผิดพลาดในการรับเข้าล็อตใหญ่: ' + err.message, 'error');
+    } finally {
+      this.isSubmittingBatch = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+      }
+      this.showLoading(false);
+    }
+  },
+
+  // =========================================================================
+  // PRE-ORDER MANAGEMENT (สินค้าพรีออเดอร์ - รอของเข้า)
+  // =========================================================================
+
+  renderPreorders() {
+    const tbody = document.getElementById('preorder-table-tbody');
+    if (!tbody) return;
+
+    let list = Array.isArray(this.preorders) ? [...this.preorders] : [];
+
+    // Status filter
+    if (this.preorderFilterStatus && this.preorderFilterStatus !== 'ALL') {
+      list = list.filter(p => p.status === this.preorderFilterStatus);
+    }
+
+    // Search filter
+    if (this.preorderSearchKeyword && this.preorderSearchKeyword.trim()) {
+      const q = this.preorderSearchKeyword.toLowerCase().trim();
+      list = list.filter(p => 
+        (p.id && p.id.toLowerCase().includes(q)) ||
+        (p.customerName && p.customerName.toLowerCase().includes(q)) ||
+        (p.customerContact && p.customerContact.toLowerCase().includes(q)) ||
+        (p.productName && p.productName.toLowerCase().includes(q)) ||
+        (p.trackingNo && p.trackingNo.toLowerCase().includes(q))
+      );
+    }
+
+    // Sort newest first
+    list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+    if (list.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="10" class="py-12 text-center text-slate-400">
+            <div class="flex flex-col items-center justify-center gap-2">
+              <i data-lucide="inbox" class="w-8 h-8 text-slate-300"></i>
+              <p class="font-medium text-xs">ไม่พบข้อมูลรายการพรีออเดอร์</p>
+              <button onclick="App.openPreorderModal()" class="mt-1 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 font-bold rounded-xl text-xs transition">
+                + เพิ่มรายการใหม่
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+      this.refreshIcons();
+      return;
+    }
+
+    const statusBadge = (st) => {
+      switch (st) {
+        case 'WAITING_ARRIVAL':
+          return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">⏳ รอสินค้าเข้า</span>';
+        case 'ARRIVED':
+          return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">📦 สินค้ามาถึงแล้ว</span>';
+        case 'COMPLETED':
+          return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">🚚 ส่งมอบแล้ว</span>';
+        case 'CANCELLED':
+          return '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">❌ ยกเลิก</span>';
+        default:
+          return `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">${st || '-'}</span>`;
+      }
+    };
+
+    tbody.innerHTML = list.map(item => {
+      const totalAmount = Number(item.totalAmount) || ((Number(item.quantity) || 1) * (Number(item.salePrice) || 0));
+      const deposit = Number(item.depositAmount) || 0;
+      const remaining = Math.max(0, totalAmount - deposit);
+      const isPaidFull = remaining <= 0;
+
+      return `
+        <tr class="hover:bg-slate-50/80 transition-colors group">
+          <td class="px-4 py-3 font-mono font-bold text-violet-700">${item.id || '-'}</td>
+          <td class="px-4 py-3">
+            <div class="font-bold text-slate-800">${item.customerName || '-'}</div>
+            <div class="text-[11px] text-slate-400 font-medium">${item.customerContact || '-'}</div>
+          </td>
+          <td class="px-4 py-3">
+            <div class="font-bold text-slate-900">${item.productName || '-'}</div>
+            <div class="text-[11px] text-slate-400">@฿${(Number(item.salePrice) || 0).toLocaleString()} / ชิ้น</div>
+          </td>
+          <td class="px-4 py-3 text-center font-extrabold text-slate-700">${item.quantity || 1}</td>
+          <td class="px-4 py-3 text-right font-extrabold text-indigo-600 tabular-nums">฿${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td class="px-4 py-3 text-right font-bold text-emerald-600 tabular-nums">฿${deposit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td class="px-4 py-3 text-right font-extrabold ${isPaidFull ? 'text-slate-400' : 'text-rose-600'} tabular-nums">
+            ${isPaidFull ? '<span class="text-emerald-600 font-bold">ชำระครบแล้ว</span>' : `฿${remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          </td>
+          <td class="px-4 py-3 text-center">
+            <div class="font-medium text-slate-700">${item.expectedArrival ? item.expectedArrival : '-'}</div>
+            ${item.trackingNo ? `<div class="text-[10px] text-indigo-500 font-mono font-semibold truncate max-w-[120px] mx-auto" title="${item.trackingNo}">${item.trackingNo}</div>` : ''}
+          </td>
+          <td class="px-4 py-3 text-center">
+            ${statusBadge(item.status)}
+          </td>
+          <td class="px-4 py-3 text-center">
+            <div class="flex items-center justify-center gap-1">
+              ${item.status === 'WAITING_ARRIVAL' ? `
+                <button type="button" onclick="App.quickUpdatePreorderStatus('${item.id}', 'ARRIVED')" title="ทำเครื่องหมายว่าสินค้ามาถึงแล้ว"
+                  class="px-2 py-1 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white rounded-lg text-[10px] font-bold transition">
+                  📦 ของถึง
+                </button>
+              ` : ''}
+              ${item.status === 'ARRIVED' ? `
+                <button type="button" onclick="App.quickUpdatePreorderStatus('${item.id}', 'COMPLETED')" title="ทำเครื่องหมายว่าส่งมอบลูกค้าแล้ว"
+                  class="px-2 py-1 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded-lg text-[10px] font-bold transition">
+                  🚚 ส่งแล้ว
+                </button>
+              ` : ''}
+              <button type="button" onclick="App.openPreorderModal('${item.id}')" title="แก้ไขรายการ"
+                class="p-1.5 hover:bg-slate-200 text-slate-500 hover:text-indigo-600 rounded-lg transition">
+                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+              </button>
+              <button type="button" onclick="App.confirmDeletePreorder('${item.id}')" title="ลบรายการ"
+                class="p-1.5 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-lg transition">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    this.refreshIcons();
+  },
+
+  renderPreorderKPIs() {
+    const list = Array.isArray(this.preorders) ? this.preorders : [];
+    
+    const waitingItems = list.filter(p => p.status === 'WAITING_ARRIVAL');
+    const arrivedItems = list.filter(p => p.status === 'ARRIVED');
+    const waitingQty = waitingItems.reduce((s, p) => s + (Number(p.quantity) || 1), 0);
+
+    const depositTotal = list
+      .filter(p => p.status !== 'CANCELLED')
+      .reduce((s, p) => s + (Number(p.depositAmount) || 0), 0);
+
+    const remainingTotal = list
+      .filter(p => p.status === 'WAITING_ARRIVAL' || p.status === 'ARRIVED')
+      .reduce((s, p) => {
+        const total = Number(p.totalAmount) || ((Number(p.quantity) || 1) * (Number(p.salePrice) || 0));
+        const deposit = Number(p.depositAmount) || 0;
+        return s + Math.max(0, total - deposit);
+      }, 0);
+
+    const elWaitingCount = document.getElementById('kpi-preorder-waiting-count');
+    const elWaitingQty = document.getElementById('kpi-preorder-waiting-qty');
+    const elArrivedCount = document.getElementById('kpi-preorder-arrived-count');
+    const elDepositTotal = document.getElementById('kpi-preorder-deposit-total');
+    const elRemainingTotal = document.getElementById('kpi-preorder-remaining-total');
+
+    if (elWaitingCount) elWaitingCount.textContent = `${waitingItems.length} รายการ`;
+    if (elWaitingQty) elWaitingQty.textContent = waitingQty.toLocaleString();
+    if (elArrivedCount) elArrivedCount.textContent = `${arrivedItems.length} รายการ`;
+    if (elDepositTotal) elDepositTotal.textContent = `฿${depositTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (elRemainingTotal) elRemainingTotal.textContent = `฿${remainingTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  },
+
+  filterPreorders(status) {
+    this.preorderFilterStatus = status;
+    document.querySelectorAll('.preorder-pill').forEach(btn => {
+      const match = btn.dataset.status === status;
+      if (match) {
+        btn.className = 'preorder-pill px-3 py-1.5 rounded-xl text-xs font-bold transition bg-violet-600 text-white shadow-sm shadow-violet-300';
+      } else {
+        btn.className = 'preorder-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+      }
+    });
+    this.renderPreorders();
+  },
+
+  handlePreorderSearch(keyword) {
+    this.preorderSearchKeyword = keyword || '';
+    this.renderPreorders();
+  },
+
+  openPreorderModal(id = null) {
+    const titleEl = document.getElementById('modal-preorder-title');
+    const form = document.getElementById('preorder-form');
+    if (form) form.reset();
+
+    const idInput = document.getElementById('modal-preorder-id');
+    const customerInput = document.getElementById('modal-preorder-customer');
+    const contactInput = document.getElementById('modal-preorder-contact');
+    const productInput = document.getElementById('modal-preorder-product-name');
+    const qtyInput = document.getElementById('modal-preorder-qty');
+    const saleInput = document.getElementById('modal-preorder-saleprice');
+    const costInput = document.getElementById('modal-preorder-costprice');
+    const depositInput = document.getElementById('modal-preorder-deposit');
+    const remainingInput = document.getElementById('modal-preorder-remaining');
+    const etaInput = document.getElementById('modal-preorder-eta');
+    const statusSelect = document.getElementById('modal-preorder-status');
+    const trackingInput = document.getElementById('modal-preorder-tracking');
+
+    if (id) {
+      const item = (this.preorders || []).find(p => p.id === id);
+      if (item) {
+        if (titleEl) titleEl.textContent = `แก้ไขพรีออเดอร์: ${item.id}`;
+        if (idInput) idInput.value = item.id;
+        if (customerInput) customerInput.value = item.customerName || '';
+        if (contactInput) contactInput.value = item.customerContact || '';
+        if (productInput) productInput.value = item.productName || '';
+        if (qtyInput) qtyInput.value = item.quantity || 1;
+        if (saleInput) saleInput.value = item.salePrice || 0;
+        if (costInput) costInput.value = item.costPrice || 0;
+        if (depositInput) depositInput.value = item.depositAmount || 0;
+        if (etaInput) etaInput.value = item.expectedArrival || '';
+        if (statusSelect) statusSelect.value = item.status || 'WAITING_ARRIVAL';
+        if (trackingInput) trackingInput.value = item.trackingNo || item.note || '';
+        this.calcPreorderAmounts(true);
+      }
+    } else {
+      if (titleEl) titleEl.textContent = 'บันทึกพรีออเดอร์สินค้าใหม่';
+      if (idInput) idInput.value = '';
+      if (qtyInput) qtyInput.value = 1;
+      if (saleInput) saleInput.value = 0;
+      if (costInput) costInput.value = 0;
+      if (depositInput) depositInput.value = 0;
+      if (remainingInput) remainingInput.value = 0;
+      if (statusSelect) statusSelect.value = 'WAITING_ARRIVAL';
+      this.calcPreorderAmounts();
+    }
+
+    document.getElementById('preorder-modal')?.classList.remove('hidden');
+    this.refreshIcons();
+  },
+
+  closePreorderModal() {
+    document.getElementById('preorder-modal')?.classList.add('hidden');
+  },
+
+  calcPreorderAmounts(fromDeposit = false) {
+    const qty = Math.max(1, Number(document.getElementById('modal-preorder-qty')?.value) || 1);
+    const sale = Math.max(0, Number(document.getElementById('modal-preorder-saleprice')?.value) || 0);
+    const total = qty * sale;
+
+    const totalPreview = document.getElementById('modal-preorder-total-preview');
+    if (totalPreview) {
+      totalPreview.textContent = `฿${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    const depositInput = document.getElementById('modal-preorder-deposit');
+    const remainingInput = document.getElementById('modal-preorder-remaining');
+
+    if (!fromDeposit && (!depositInput.value || Number(depositInput.value) === 0)) {
+      const half = Math.round((total * 0.5) * 100) / 100;
+      if (depositInput) depositInput.value = half;
+    }
+
+    const deposit = Math.max(0, Number(depositInput?.value) || 0);
+    const remaining = Math.max(0, total - deposit);
+
+    if (remainingInput) {
+      remainingInput.value = remaining.toFixed(2);
+    }
+  },
+
+  setPreorderDepositPercent(pct) {
+    const qty = Math.max(1, Number(document.getElementById('modal-preorder-qty')?.value) || 1);
+    const sale = Math.max(0, Number(document.getElementById('modal-preorder-saleprice')?.value) || 0);
+    const total = qty * sale;
+
+    const depositVal = Math.round((total * (pct / 100)) * 100) / 100;
+    const depositInput = document.getElementById('modal-preorder-deposit');
+    if (depositInput) {
+      depositInput.value = depositVal;
+    }
+    this.calcPreorderAmounts(true);
+  },
+
+  async savePreorderFromModal() {
+    if (this.isSubmittingPreorder) return;
+
+    const id = document.getElementById('modal-preorder-id')?.value || null;
+    const customer = document.getElementById('modal-preorder-customer')?.value?.trim();
+    const contact = document.getElementById('modal-preorder-contact')?.value?.trim() || '';
+    const product = document.getElementById('modal-preorder-product-name')?.value?.trim();
+    const qty = Math.max(1, Number(document.getElementById('modal-preorder-qty')?.value) || 1);
+    const sale = Math.max(0, Number(document.getElementById('modal-preorder-saleprice')?.value) || 0);
+    const cost = Math.max(0, Number(document.getElementById('modal-preorder-costprice')?.value) || 0);
+    const deposit = Math.max(0, Number(document.getElementById('modal-preorder-deposit')?.value) || 0);
+    const eta = document.getElementById('modal-preorder-eta')?.value || '';
+    const status = document.getElementById('modal-preorder-status')?.value || 'WAITING_ARRIVAL';
+    const tracking = document.getElementById('modal-preorder-tracking')?.value?.trim() || '';
+
+    if (!customer || !product) {
+      this.showToast('กรุณากรอกชื่อลูกค้าและชื่อสินค้าที่พรีออเดอร์', 'warning');
+      return;
+    }
+
+    const submitBtn = document.getElementById('btn-submit-preorder');
+
+    try {
+      this.isSubmittingPreorder = true;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+      }
+      this.showLoading(true);
+
+      const payload = {
+        id: id || undefined,
+        customerName: customer,
+        customerContact: contact,
+        productName: product,
+        quantity: qty,
+        salePrice: sale,
+        costPrice: cost,
+        depositAmount: deposit,
+        expectedArrival: eta,
+        status: status,
+        trackingNo: tracking,
+        note: tracking
+      };
+
+      const res = await ApiService.savePreorder(payload);
+      this.showToast(res.message || 'บันทึกข้อมูลพรีออเดอร์สำเร็จ!', 'success');
+      this.closePreorderModal();
+      
+      this.preorders = await ApiService.getPreorders();
+      this.renderPreorders();
+      this.renderPreorderKPIs();
+    } catch (err) {
+      this.showToast('ไม่สามารถบันทึกพรีออเดอร์ได้: ' + err.message, 'error');
+    } finally {
+      this.isSubmittingPreorder = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+      }
+      this.showLoading(false);
+    }
+  },
+
+  async quickUpdatePreorderStatus(id, newStatus) {
+    try {
+      this.showLoading(true);
+      await ApiService.updatePreorderStatus(id, newStatus);
+      const statusThai = newStatus === 'ARRIVED' ? 'สินค้ามาถึงแล้ว 📦' : newStatus === 'COMPLETED' ? 'ส่งมอบลูกค้าเรียบร้อย 🚚' : newStatus;
+      this.showToast(`อัปเดตสถานะเป็น "${statusThai}" สำเร็จ`, 'success');
+      this.preorders = await ApiService.getPreorders();
+      this.renderPreorders();
+      this.renderPreorderKPIs();
+    } catch (err) {
+      this.showToast('อัปเดตสถานะไม่สำเร็จ: ' + err.message, 'error');
+    } finally {
+      this.showLoading(false);
+    }
+  },
+
+  async confirmDeletePreorder(id) {
+    if (!confirm(`คุณต้องการลบรายการพรีออเดอร์ ${id} ใช่หรือไม่?`)) return;
+    try {
+      this.showLoading(true);
+      await ApiService.deletePreorder(id);
+      this.showToast(`ลบรายการพรีออเดอร์ ${id} เรียบร้อย`, 'success');
+      this.preorders = await ApiService.getPreorders();
+      this.renderPreorders();
+      this.renderPreorderKPIs();
+    } catch (err) {
+      this.showToast('ลบรายการไม่สำเร็จ: ' + err.message, 'error');
     } finally {
       this.showLoading(false);
     }

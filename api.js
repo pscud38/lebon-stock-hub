@@ -2089,6 +2089,257 @@ const ApiService = {
       productId: productId,
       newStock: pIdx !== -1 ? products[pIdx].currentStock : 0
     };
+  },
+
+  // =========================================================================
+  // PRE-ORDER (สินค้าสั่งจอง & รอของส่ง) CRUD
+  // =========================================================================
+
+  async getPreorders() {
+    let preorders = [];
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(CONFIG.STORAGE_KEYS.PREORDERS);
+        preorders = stored ? JSON.parse(stored) : (CONFIG.DEFAULT_PREORDERS || []);
+      } catch (e) {
+        preorders = CONFIG.DEFAULT_PREORDERS || [];
+      }
+      preorders = preorders.map(p => ({
+        ...p,
+        id: p.id || p.preorderId,
+        preorderId: p.preorderId || p.id,
+        expectedArrival: p.expectedArrival || p.expectedDate || '',
+        expectedDate: p.expectedDate || p.expectedArrival || '',
+        trackingNo: p.trackingNo || p.note || '',
+        note: p.note || p.trackingNo || ''
+      }));
+    }
+
+    if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
+      try {
+        const { url } = getSupabaseConfig();
+        const headers = getSupabaseHeaders();
+        const res = await fetch(`${url}/rest/v1/preorders?select=*&order=created_at.desc`, { headers });
+        if (res.ok) {
+          const rows = await res.json();
+          if (Array.isArray(rows)) {
+            preorders = rows.map(r => ({
+              id: r.preorder_id || r.preorderId || r.id,
+              preorderId: r.preorder_id || r.preorderId || r.id,
+              createdAt: r.created_at || r.createdAt,
+              customerName: r.customer_name || r.customerName,
+              customerContact: r.customer_contact || r.customerContact || '',
+              productId: r.product_id || r.productId || '',
+              productName: r.product_name || r.productName,
+              quantity: Number(r.quantity) || 1,
+              salePrice: Number(r.sale_price || r.salePrice) || 0,
+              costPrice: Number(r.cost_price || r.costPrice) || 0,
+              totalAmount: Number(r.total_amount || r.totalAmount) || 0,
+              depositAmount: Number(r.deposit_amount || r.depositAmount) || 0,
+              remainingAmount: Number(r.remaining_amount || r.remainingAmount) || 0,
+              status: r.status || 'WAITING_ARRIVAL',
+              expectedArrival: r.expected_date || r.expectedDate || r.expectedArrival || '',
+              expectedDate: r.expected_date || r.expectedDate || r.expectedArrival || '',
+              trackingNo: r.note || r.trackingNo || '',
+              operator: r.operator || 'Admin',
+              note: r.note || r.trackingNo || '',
+              lastUpdated: r.last_updated || r.lastUpdated || new Date().toISOString()
+            }));
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem(CONFIG.STORAGE_KEYS.PREORDERS, JSON.stringify(preorders));
+            }
+          }
+        }
+      } catch (sbErr) {
+        console.warn('Supabase preorders fetch fallback to local:', sbErr);
+      }
+    }
+
+    return preorders;
+  },
+
+  async savePreorder(data) {
+    let preorders = [];
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(CONFIG.STORAGE_KEYS.PREORDERS);
+        preorders = stored ? JSON.parse(stored) : (CONFIG.DEFAULT_PREORDERS || []);
+      } catch (e) {
+        preorders = CONFIG.DEFAULT_PREORDERS || [];
+      }
+    }
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const isEdit = Boolean(data.id || data.preorderId);
+    const preorderId = isEdit ? String(data.id || data.preorderId).trim() : ('PRE-' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '-' + Math.floor(100 + Math.random() * 900));
+
+    const qty = Math.max(1, Number(data.quantity) || 1);
+    const salePrice = Math.max(0, Number(data.salePrice) || 0);
+    const totalAmount = Number(data.totalAmount) || (qty * salePrice);
+    const depositAmount = Math.max(0, Number(data.depositAmount) || 0);
+    const remainingAmount = Math.max(0, totalAmount - depositAmount);
+
+    const preorderItem = {
+      id: preorderId,
+      preorderId,
+      createdAt: data.createdAt || nowIso,
+      customerName: String(data.customerName || '').trim() || 'ลูกค้าทั่วไป',
+      customerContact: String(data.customerContact || '').trim(),
+      productId: String(data.productId || '').trim(),
+      productName: String(data.productName || '').trim() || 'สินค้าสั่งจอง',
+      quantity: qty,
+      salePrice,
+      costPrice: Number(data.costPrice) || 0,
+      totalAmount,
+      depositAmount,
+      remainingAmount,
+      status: data.status || 'WAITING_ARRIVAL',
+      expectedArrival: String(data.expectedArrival || data.expectedDate || '').trim(),
+      expectedDate: String(data.expectedDate || data.expectedArrival || '').trim(),
+      trackingNo: String(data.trackingNo || data.note || '').trim(),
+      operator: String(data.operator || 'Admin').trim(),
+      note: String(data.note || data.trackingNo || '').trim(),
+      lastUpdated: nowIso
+    };
+
+    const existingIdx = preorders.findIndex(p => p.preorderId === preorderId || p.id === preorderId);
+    if (existingIdx !== -1) {
+      preorders[existingIdx] = preorderItem;
+    } else {
+      preorders.unshift(preorderItem);
+    }
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(CONFIG.STORAGE_KEYS.PREORDERS, JSON.stringify(preorders));
+    }
+
+    if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
+      try {
+        const { url } = getSupabaseConfig();
+        const headers = {
+          ...getSupabaseHeaders(),
+          'Prefer': 'resolution=merge-duplicates'
+        };
+        const sbPayload = {
+          preorder_id: preorderItem.preorderId,
+          created_at: preorderItem.createdAt,
+          customer_name: preorderItem.customerName,
+          customer_contact: preorderItem.customerContact,
+          product_id: preorderItem.productId,
+          product_name: preorderItem.productName,
+          quantity: preorderItem.quantity,
+          sale_price: preorderItem.salePrice,
+          total_amount: preorderItem.totalAmount,
+          deposit_amount: preorderItem.depositAmount,
+          remaining_amount: preorderItem.remainingAmount,
+          status: preorderItem.status,
+          expected_date: preorderItem.expectedArrival || preorderItem.expectedDate,
+          operator: preorderItem.operator,
+          note: preorderItem.trackingNo || preorderItem.note,
+          last_updated: preorderItem.lastUpdated
+        };
+        await fetch(`${url}/rest/v1/preorders`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(sbPayload)
+        });
+      } catch (err) {
+        console.warn('Supabase savePreorder sync warning:', err);
+      }
+    }
+
+    return {
+      success: true,
+      message: isEdit ? `อัปเดตรายการจอง ${preorderId} สำเร็จ!` : `บันทึกรายการจอง ${preorderId} เรียบร้อย!`,
+      preorder: preorderItem
+    };
+  },
+
+  async updatePreorderStatus(preorderId, newStatus) {
+    let preorders = [];
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(CONFIG.STORAGE_KEYS.PREORDERS);
+        preorders = stored ? JSON.parse(stored) : [];
+      } catch (e) {
+        preorders = [];
+      }
+    }
+
+    const item = preorders.find(p => p.preorderId === preorderId || p.id === preorderId);
+    if (!item) throw new Error('ไม่พบรายการจอง: ' + preorderId);
+
+    item.status = newStatus;
+    item.lastUpdated = new Date().toISOString();
+    if (newStatus === 'COMPLETED') {
+      item.remainingAmount = 0;
+      item.depositAmount = item.totalAmount;
+    }
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(CONFIG.STORAGE_KEYS.PREORDERS, JSON.stringify(preorders));
+    }
+
+    if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
+      try {
+        const { url } = getSupabaseConfig();
+        const headers = getSupabaseHeaders();
+        await fetch(`${url}/rest/v1/preorders?preorder_id=eq.${encodeURIComponent(preorderId)}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            status: item.status,
+            remaining_amount: item.remainingAmount,
+            deposit_amount: item.depositAmount,
+            last_updated: item.lastUpdated
+          })
+        });
+      } catch (err) {
+        console.warn('Supabase updatePreorderStatus warning:', err);
+      }
+    }
+
+    return {
+      success: true,
+      message: `เปลี่ยนสถานะรายการจองเป็น ${newStatus} แล้ว`,
+      preorder: item
+    };
+  },
+
+  async deletePreorder(preorderId) {
+    let preorders = [];
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(CONFIG.STORAGE_KEYS.PREORDERS);
+        preorders = stored ? JSON.parse(stored) : [];
+      } catch (e) {
+        preorders = [];
+      }
+    }
+
+    preorders = preorders.filter(p => p.preorderId !== preorderId && p.id !== preorderId);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(CONFIG.STORAGE_KEYS.PREORDERS, JSON.stringify(preorders));
+    }
+
+    if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
+      try {
+        const { url } = getSupabaseConfig();
+        const headers = getSupabaseHeaders();
+        await fetch(`${url}/rest/v1/preorders?preorder_id=eq.${encodeURIComponent(preorderId)}`, {
+          method: 'DELETE',
+          headers
+        });
+      } catch (err) {
+        console.warn('Supabase deletePreorder warning:', err);
+      }
+    }
+
+    return {
+      success: true,
+      message: `ลบรายการจอง ${preorderId} เรียบร้อยแล้ว`
+    };
   }
 };
 

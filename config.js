@@ -16,6 +16,7 @@ const CONFIG = {
     PRODUCTS: 'stock_local_products',
     TRANSACTIONS: 'stock_local_transactions',
     CATEGORIES: 'stock_local_categories',
+    PREORDERS: 'stock_local_preorders',
     APP_SETTINGS: 'stock_app_settings'
   },
 
@@ -218,6 +219,49 @@ const CONFIG = {
       operator: 'Staff A',
       note: 'ขายหน้าร้าน (ขายดีมาก)',
       imageUrl: ''
+    }
+  ],
+
+  DEFAULT_PREORDERS: [
+    {
+      id: 'PRE-20260914-001',
+      preorderId: 'PRE-20260914-001',
+      createdAt: new Date().toISOString(),
+      customerName: 'คุณนก (IG: nok_toylover)',
+      customerContact: '081-234-5678',
+      productId: 'TOY-001',
+      productName: 'กล่องสุ่ม Art Toy Baby Three V3 (จุ่มลุ้นซีเคร็ท)',
+      quantity: 2,
+      salePrice: 490,
+      totalAmount: 980,
+      depositAmount: 500,
+      remainingAmount: 480,
+      status: 'WAITING_ARRIVAL',
+      expectedArrival: 'ปลายเดือน ก.ย. 69',
+      expectedDate: 'ปลายเดือน ก.ย. 69',
+      trackingNo: 'SF-CN-88910',
+      operator: 'Admin',
+      note: 'ขอลุ้นซีเคร็ท สั่งจีนล็อตใหม่'
+    },
+    {
+      id: 'PRE-20260914-002',
+      preorderId: 'PRE-20260914-002',
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      customerName: 'คุณกอล์ฟ',
+      customerContact: 'LINE: golf_artbox',
+      productId: 'TOY-003',
+      productName: 'กล่องสุ่ม Crybaby Sunset Concert Series',
+      quantity: 1,
+      salePrice: 650,
+      totalAmount: 650,
+      depositAmount: 650,
+      remainingAmount: 0,
+      status: 'ARRIVED',
+      expectedArrival: '15/09/2026',
+      expectedDate: '15/09/2026',
+      trackingNo: 'EMS-TH-44912',
+      operator: 'Staff A',
+      note: 'ชำระเต็มจำนวนแล้ว รอแจ้งให้มารับหน้าร้าน'
     }
   ]
 };
