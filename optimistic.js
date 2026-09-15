@@ -4,10 +4,33 @@
  */
 
 const OptimisticEngine = {
+  _recentFingerprints: new Map(),
+
+  _checkAndLock(fingerprint, cooldownMs = 1200) {
+    const now = Date.now();
+    const lastTime = this._recentFingerprints.get(fingerprint);
+    if (lastTime && (now - lastTime) < cooldownMs) {
+      console.warn(`[OptimisticEngine] Duplicate identical transaction blocked (${fingerprint}) within ${now - lastTime}ms`);
+      return false;
+    }
+    this._recentFingerprints.set(fingerprint, now);
+    if (this._recentFingerprints.size > 50) {
+      for (const [k, t] of this._recentFingerprints.entries()) {
+        if (now - t > 10000) this._recentFingerprints.delete(k);
+      }
+    }
+    return true;
+  },
+
   /**
    * ตัดสต็อกเบิกขาย (Stock OUT) แบบ Optimistic 0ms
    */
   async executeStockOut({ productId, quantity, customPrice, operator, note, imageBase64 }) {
+    const fingerprint = `OUT:${productId}:${quantity}:${customPrice !== null && customPrice !== undefined ? customPrice : ''}`;
+    if (!this._checkAndLock(fingerprint)) {
+      throw new Error('ตรวจพบการกดทำรายการซ้ำในเสี้ยววินาที ระบบระงับรายการซ้ำเพื่อป้องกันข้อมูลเบิ้ล');
+    }
+
     const store = window.appStore;
     const product = store.getState('products').find((p) => p.productId === productId);
 
@@ -126,6 +149,11 @@ const OptimisticEngine = {
    * รับสินค้าเข้าคลัง (Stock IN) แบบ Optimistic 0ms พร้อม WAC ถ่วงน้ำหนัก
    */
   async executeStockIn({ productId, quantity, costPrice, operator, note, imageBase64 }) {
+    const fingerprint = `IN:${productId}:${quantity}:${costPrice !== null && costPrice !== undefined ? costPrice : ''}`;
+    if (!this._checkAndLock(fingerprint)) {
+      throw new Error('ตรวจพบการกดทำรายการซ้ำในเสี้ยววินาที ระบบระงับรายการซ้ำเพื่อป้องกันข้อมูลเบิ้ล');
+    }
+
     const store = window.appStore;
     const product = store.getState('products').find((p) => p.productId === productId);
 
