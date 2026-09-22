@@ -47,7 +47,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Custom Design System CSS -->
-  <link rel="stylesheet" href="styles.css?v=4.0.6">
+  <link rel="stylesheet" href="styles.css?v=4.0.5">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
@@ -612,7 +612,7 @@
 
           <!-- Big Submit Button Card -->
           <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200/80">
-            <button id="pos-submit-btn" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;" class="w-full py-4 sm:py-5 bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl font-extrabold text-base flex items-center justify-center gap-2.5 tracking-wide active:scale-[0.99] transition-all shadow-lg shadow-indigo-500/25 btn-submit-glow">
+            <button id="pos-submit-btn" class="w-full py-4 sm:py-5 bg-gradient-to-r from-indigo-600 via-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl font-extrabold text-base flex items-center justify-center gap-2.5 tracking-wide active:scale-[0.99] transition-all shadow-lg shadow-indigo-500/25 btn-submit-glow">
               <i data-lucide="check-circle-2" class="w-5 h-5"></i> <span id="pos-submit-btn-text">ยืนยันบันทึกรายการ</span>
             </button>
             <p id="pos-submit-subtext" class="text-xs text-center text-slate-400 mt-2.5 font-medium flex items-center justify-center gap-1">
@@ -1417,7 +1417,7 @@
             class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition">
             ยกเลิก
           </button>
-          <button type="button" id="btn-submit-batch-in" onclick="App.submitBatchInTransaction()" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;"
+          <button type="button" id="btn-submit-batch-in" onclick="App.submitBatchInTransaction()" 
             class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-200 transition flex items-center gap-1.5 active:scale-95">
             <i data-lucide="check" class="w-4 h-4"></i> บันทึกรับเข้าทั้งหมด
           </button>
@@ -1834,14 +1834,14 @@
   </div>
 
   <!-- Application Scripts with Version Cache-Busting -->
-  <script src="config.js?v=4.0.6"></script>
-  <script src="auth.js?v=4.0.6"></script>
-  <script src="api.js?v=4.0.6"></script>
-  <script src="store.js?v=4.0.6"></script>
-  <script src="optimistic.js?v=4.0.6"></script>
-  <script src="scanner.js?v=4.0.6"></script>
-  <script src="reports.js?v=4.0.6"></script>
-  <script src="app.js?v=4.0.6"></script>
+  <script src="config.js?v=4.0.5"></script>
+  <script src="auth.js?v=4.0.5"></script>
+  <script src="api.js?v=4.0.5"></script>
+  <script src="store.js?v=4.0.5"></script>
+  <script src="optimistic.js?v=4.0.5"></script>
+  <script src="scanner.js?v=4.0.5"></script>
+  <script src="reports.js?v=4.0.5"></script>
+  <script src="app.js?v=4.0.5"></script>
 
   <!-- PWA Service Worker Registration & Auto-Update Lifecycle -->
   <script>

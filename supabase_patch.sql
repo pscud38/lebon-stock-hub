@@ -63,7 +63,7 @@ BEGIN
 END;
 $func$;
 
--- 3. Stored Procedure ตัดสต็อก / รับเข้า แบบ Atomic Transction พร้อมคำนวณ WAC (MATH-01) และป้องกันรายการเบิ้ล (IDEMPOTENCY)
+-- 3. Stored Procedure ตัดสต็อก / รับเข้า แบบ Atomic Transction พร้อมคำนวณ WAC (MATH-01)
 CREATE OR REPLACE FUNCTION execute_stock_transaction(
     p_product_id TEXT,
     p_type TEXT,
@@ -71,8 +71,7 @@ CREATE OR REPLACE FUNCTION execute_stock_transaction(
     p_price NUMERIC,
     p_operator TEXT,
     p_note TEXT DEFAULT '',
-    p_image_url TEXT DEFAULT '',
-    p_client_trans_id TEXT DEFAULT NULL
+    p_image_url TEXT DEFAULT ''
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -81,7 +80,6 @@ AS $func$
 DECLARE
     v_product RECORD;
     v_trans_id TEXT;
-    v_existing_trans RECORD;
     v_old_stock NUMERIC;
     v_old_cost NUMERIC;
     v_new_stock NUMERIC;
@@ -92,57 +90,7 @@ DECLARE
     v_sale_price NUMERIC;
     v_cost_price NUMERIC;
 BEGIN
-    -- 0. ป้องกันข้อมูลติดลบหรืออินพุตผิดปกติ (Boundary Guards)
-    IF p_quantity IS NULL OR p_quantity <= 0 THEN
-        RAISE EXCEPTION 'จำนวนสินค้าต้องมากกว่า 0 (ได้รับ %)', p_quantity;
-    END IF;
-    IF p_price IS NOT NULL AND p_price < 0 THEN
-        RAISE EXCEPTION 'ราคาสินค้าต้องไม่ติดลบ (ได้รับ %)', p_price;
-    END IF;
-
-    -- 1. Idempotency Guard: ตรวจสอบว่าเคยบันทึกรายการด้วย client_trans_id นี้แล้วหรือไม่
-    IF p_client_trans_id IS NOT NULL AND TRIM(p_client_trans_id) <> '' THEN
-        SELECT trans_id, total_revenue - total_cost AS profit, quantity, cost_price, sale_price 
-        INTO v_existing_trans 
-        FROM transactions 
-        WHERE trans_id = TRIM(p_client_trans_id);
-
-        IF FOUND THEN
-            SELECT current_stock, cost_price INTO v_old_stock, v_old_cost FROM products WHERE product_id = p_product_id;
-            RETURN jsonb_build_object(
-                'success', true,
-                'transId', TRIM(p_client_trans_id),
-                'newStock', COALESCE(v_old_stock, 0),
-                'newCost', COALESCE(v_old_cost, 0),
-                'profit', COALESCE(v_existing_trans.profit, 0),
-                'duplicatePrevented', true
-            );
-        END IF;
-    END IF;
-
-    -- 2. Time-Window Deduplication Guard: ตรวจสอบรายการซ้ำในเสี้ยววินาที (3 วินาที)
-    SELECT trans_id, total_revenue - total_cost AS profit INTO v_existing_trans 
-    FROM transactions 
-    WHERE product_id = p_product_id 
-      AND type = p_type 
-      AND quantity = p_quantity 
-      AND operator = COALESCE(p_operator, 'Staff')
-      AND timestamp >= NOW() - INTERVAL '3 seconds'
-    ORDER BY timestamp DESC LIMIT 1;
-
-    IF FOUND THEN
-        SELECT current_stock, cost_price INTO v_old_stock, v_old_cost FROM products WHERE product_id = p_product_id;
-        RETURN jsonb_build_object(
-            'success', true,
-            'transId', v_existing_trans.trans_id,
-            'newStock', COALESCE(v_old_stock, 0),
-            'newCost', COALESCE(v_old_cost, 0),
-            'profit', COALESCE(v_existing_trans.profit, 0),
-            'duplicatePrevented', true
-        );
-    END IF;
-
-    -- 3. ล็อกแถวสินค้าเพื่อป้องกัน Race Condition / ตัดสต็อกซ้อน
+    -- ล็อกแถวสินค้าเพื่อป้องกัน Race Condition / ตัดสต็อกซ้อน
     SELECT * INTO v_product FROM products WHERE product_id = p_product_id FOR UPDATE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'ไม่พบสินค้า %', p_product_id;
@@ -198,12 +146,8 @@ BEGIN
         last_updated = NOW()
     WHERE product_id = p_product_id;
 
-    -- กำหนดรหัส Transaction
-    IF p_client_trans_id IS NOT NULL AND TRIM(p_client_trans_id) <> '' THEN
-        v_trans_id := TRIM(p_client_trans_id);
-    ELSE
-        v_trans_id := 'TRX-' || TO_CHAR(NOW(), 'YYYYMMDD-HH24MISS-') || LPAD(FLOOR(RANDOM() * 1000)::TEXT, 3, '0');
-    END IF;
+    -- บันทึกประวัติ Transaction
+    v_trans_id := 'TRX-' || TO_CHAR(NOW(), 'YYYYMMDD-HH24MISS-') || LPAD(FLOOR(RANDOM() * 1000)::TEXT, 3, '0');
 
     INSERT INTO transactions (
         trans_id, timestamp, product_id, product_name, type, quantity,
@@ -222,25 +166,6 @@ BEGIN
         'newCost', v_new_cost,
         'profit', v_profit
     );
-END;
-$func$;
-
--- Overload สำหรับ 7 Parameters (รักษา Backward-Compatibility 100% สำหรับไคลเอนต์รุ่นเก่า)
-CREATE OR REPLACE FUNCTION execute_stock_transaction(
-    p_product_id TEXT,
-    p_type TEXT,
-    p_quantity NUMERIC,
-    p_price NUMERIC,
-    p_operator TEXT,
-    p_note TEXT DEFAULT '',
-    p_image_url TEXT DEFAULT ''
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $func$
-BEGIN
-    RETURN execute_stock_transaction(p_product_id, p_type, p_quantity, p_price, p_operator, p_note, p_image_url, NULL);
 END;
 $func$;
 
@@ -430,7 +355,6 @@ GRANT SELECT ON safe_users TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION get_next_product_id() TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION mute_product_alert(TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION execute_stock_transaction(TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, TEXT) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION execute_stock_transaction(TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION login_user(TEXT, TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION change_password(TEXT, TEXT, TEXT, BOOLEAN) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION admin_save_user(TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;

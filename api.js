@@ -381,49 +381,27 @@ const ApiService = {
         const effectivePrice = isSalePriceProvided ? Number(transactionData.salePrice) : (type === 'IN' ? inCostParam : null);
         const imageUrl = transactionData.imageUrl || transactionData.imageBase64 || '';
 
-        const clientTransId = transactionData.clientTransId || transactionData.transId || ('TX-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9).toUpperCase());
-
-        // 1. เรียกใช้ Stored Procedure: execute_stock_transaction (Atomic 100% พร้อม Row-level Lock และ Idempotency Guard)
+        // 1. เรียกใช้ Stored Procedure: execute_stock_transaction (Atomic 100% พร้อม Row-level Lock)
         try {
-          const rpcPayload = {
-            p_product_id: productId,
-            p_type: type,
-            p_quantity: qty,
-            p_price: effectivePrice,
-            p_operator: transactionData.operator || 'Staff',
-            p_note: transactionData.note || '',
-            p_image_url: imageUrl,
-            p_client_trans_id: clientTransId
-          };
-
-          let rpcRes = await fetch(`${url}/rest/v1/rpc/execute_stock_transaction`, {
+          const rpcRes = await fetch(`${url}/rest/v1/rpc/execute_stock_transaction`, {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify(rpcPayload)
+            body: JSON.stringify({
+              p_product_id: productId,
+              p_type: type,
+              p_quantity: qty,
+              p_price: effectivePrice,
+              p_operator: transactionData.operator || 'Staff',
+              p_note: transactionData.note || '',
+              p_image_url: imageUrl
+            })
           });
-
-          // Backward-compatibility: ถ้า Supabase ยังไม่ได้รัน Stored Procedure 8 ตัวแปร ให้ retry แบบ 7 ตัวแปร
-          if (!rpcRes.ok && (rpcRes.status === 404 || rpcRes.status === 400)) {
-            const errTxtCheck = await rpcRes.clone().text();
-            if (errTxtCheck.includes('function') || errTxtCheck.includes('schema cache') || errTxtCheck.includes('PGRST')) {
-              const legacyPayload = { ...rpcPayload };
-              delete legacyPayload.p_client_trans_id;
-              const retryRes = await fetch(`${url}/rest/v1/rpc/execute_stock_transaction`, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(legacyPayload)
-              });
-              if (retryRes.ok) {
-                rpcRes = retryRes;
-              }
-            }
-          }
 
           if (rpcRes.ok) {
             const rpcJson = await rpcRes.json();
             if (rpcJson && rpcJson.success) {
               const newStock = Number(rpcJson.newStock);
-              const transId = rpcJson.transId || clientTransId;
+              const transId = rpcJson.transId;
               const profit = Number(rpcJson.profit) || 0;
 
               // อัปเดต LocalStorage แคชคู่ขนาน
@@ -434,11 +412,10 @@ const ApiService = {
 
               const result = {
                 success: true,
-                message: rpcJson.duplicatePrevented ? `รายการ ${type} นี้บันทึกเรียบร้อยแล้ว (ระบบป้องกันรายการซ้ำ)` : `บันทึกรายการ ${type} สำเร็จ! สต็อกคงเหลือ: ${newStock}`,
+                message: `บันทึกรายการ ${type} สำเร็จ! สต็อกคงเหลือ: ${newStock}`,
                 transId: transId,
                 newStock: newStock,
-                imageUrl: imageUrl,
-                duplicatePrevented: !!rpcJson.duplicatePrevented
+                imageUrl: imageUrl
               };
 
               if (!isExplicitStaff) {
@@ -458,30 +435,13 @@ const ApiService = {
               } catch (_) {}
               throw new Error(cleanMsg);
             }
-            console.warn('RPC execute_stock_transaction unavailable, checking fallback:', errTxt);
+            console.warn('RPC execute_stock_transaction unavailable, proceeding to direct query fallback:', errTxt);
           }
         } catch (rpcErr) {
           if (rpcErr.message && (rpcErr.message.includes('สต็อกไม่พอ') || rpcErr.message.includes('ไม่พบสินค้า'))) {
             throw rpcErr;
           }
-          console.warn('RPC execution exception, verifying status before fallback:', rpcErr);
-
-          // Network Drop On Mobile: ตรวจสอบว่าคำสั่งถูกบันทึกลงฐานข้อมูลแล้วหรือไม่ ก่อนจะทำ Fallback ซ้ำ
-          try {
-            const checkRes = await fetch(`${url}/rest/v1/transactions?trans_id=eq.${encodeURIComponent(clientTransId)}&select=trans_id`, { headers });
-            if (checkRes.ok) {
-              const checkRows = await checkRes.json();
-              if (checkRows && checkRows.length > 0) {
-                console.warn('[Idempotency] Transaction was already committed despite mobile network hiccup:', clientTransId);
-                return {
-                  success: true,
-                  message: `บันทึกรายการ ${type} สำเร็จเรียบร้อย!`,
-                  transId: clientTransId,
-                  duplicatePrevented: true
-                };
-              }
-            }
-          } catch (_) {}
+          console.warn('RPC execution exception, falling back to direct query:', rpcErr);
         }
 
         // 2. Direct Query Fallback (กรณีฐานข้อมูลยังไม่ได้ลง Patch RPC)
@@ -531,7 +491,8 @@ const ApiService = {
           throw new Error('ประเภทรายการไม่ถูกต้อง (ต้องเป็น IN, OUT, หรือ ADJUST)');
         }
 
-        const transId = clientTransId;
+        const rand4 = Math.floor(1000 + Math.random() * 9000);
+        const transId = 'TRX-' + Date.now() + '-' + rand4;
         const nowIso = new Date().toISOString();
 
         const profitPerUnit = Number((dbSalePrice - newWac).toFixed(2));
@@ -552,7 +513,7 @@ const ApiService = {
           body: JSON.stringify(updateProductPayload)
         });
 
-        // เพิ่มบันทึก Transactions โดยใช้ clientTransId ป้องกัน Primary Key ชนซ้ำ
+        // เพิ่มบันทึก Transactions
         const insertTransPayload = {
           trans_id: transId,
           timestamp: nowIso,
@@ -583,22 +544,11 @@ const ApiService = {
         }
         if (!insRes.ok) {
           const iErr = await insRes.text();
-          if (iErr.includes('duplicate key') || iErr.includes('23505') || iErr.includes('already exists')) {
-            console.warn('[Idempotency] Transaction already recorded in transactions table:', transId);
-            return {
-              success: true,
-              message: `บันทึกรายการ ${type} สำเร็จ! สต็อกคงเหลือ: ${newStock}`,
-              transId: transId,
-              newStock: newStock,
-              imageUrl: imageUrl,
-              duplicatePrevented: true
-            };
-          }
           throw new Error('Failed to insert transaction: ' + iErr);
         }
 
         // อัปเดต LocalStorage แคชคู่ขนาน
-        this.addLocalTransaction({ role, ...transactionData, transId });
+        this.addLocalTransaction({ role, ...transactionData });
 
         const roleClean = (role || '').toLowerCase().trim();
         const isExplicitStaff = (roleClean === 'staff' || (roleClean && roleClean !== 'admin'));
@@ -620,8 +570,8 @@ const ApiService = {
         return result;
       } catch (sbErr) {
         if (sbErr.message && (sbErr.message.includes('fetch') || sbErr.message.includes('Network') || (typeof navigator !== 'undefined' && !navigator.onLine))) {
-          this.queueOfflineAction('addTransaction', { role, ...transactionData, transId: clientTransId });
-          const localResult = this.addLocalTransaction({ role, ...transactionData, transId: clientTransId });
+          this.queueOfflineAction('addTransaction', { role, ...transactionData });
+          const localResult = this.addLocalTransaction({ role, ...transactionData });
           localResult.isOfflineQueued = true;
           localResult.message = '📶 บันทึกออฟไลน์แล้ว (เน็ตขัดข้อง - จะซิงค์เมื่อต่อเน็ต)';
           return localResult;

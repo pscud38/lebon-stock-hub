@@ -1501,8 +1501,8 @@ const App = {
       return;
     }
     const now = Date.now();
-    if (this.lastPosSubmitTime && (now - this.lastPosSubmitTime) < 2500) {
-      console.warn('[POS] Rapid click detected within 2500ms, ignoring duplicate trigger.');
+    if (this.lastPosSubmitTime && (now - this.lastPosSubmitTime) < 1000) {
+      console.warn('[POS] Rapid click detected within 1000ms, ignoring duplicate trigger.');
       return;
     }
 
@@ -1541,13 +1541,10 @@ const App = {
     let originalHtml = '';
     if (submitBtn) {
       originalHtml = submitBtn.innerHTML;
-      submitBtn.style.pointerEvents = 'none';
       submitBtn.disabled = true;
       submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
       submitBtn.innerHTML = '<div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block"></div> <span>กำลังบันทึกข้อมูล...</span>';
     }
-
-    const clientTransId = 'TX-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9).toUpperCase();
 
     try {
       if (type === 'OUT' && typeof OptimisticEngine !== 'undefined') {
@@ -1557,8 +1554,7 @@ const App = {
           customPrice,
           operator,
           note,
-          imageBase64: this.currentAttachedPhotoBase64,
-          clientTransId
+          imageBase64: this.currentAttachedPhotoBase64
         });
       } else if (type === 'IN' && typeof OptimisticEngine !== 'undefined') {
         await OptimisticEngine.executeStockIn({
@@ -1567,8 +1563,7 @@ const App = {
           costPrice: (customPrice !== null && customPrice >= 0) ? customPrice : (product ? product.costPrice : undefined),
           operator,
           note,
-          imageBase64: this.currentAttachedPhotoBase64,
-          clientTransId
+          imageBase64: this.currentAttachedPhotoBase64
         });
       } else {
         // Fallback or ADJUST
@@ -1582,9 +1577,7 @@ const App = {
           operator,
           note,
           role: (user && user.role) ? user.role : 'staff',
-          imageBase64: this.currentAttachedPhotoBase64,
-          clientTransId,
-          transId: clientTransId
+          imageBase64: this.currentAttachedPhotoBase64
         });
         this.showToast(res.message || 'บันทึกรายการสำเร็จ!', 'success');
         await this.refreshData();
@@ -1612,7 +1605,6 @@ const App = {
           if (originalHtml) submitBtn.innerHTML = originalHtml;
           this.renderPosReasonPills(document.getElementById('pos-type-select')?.value || 'OUT');
           submitBtn.disabled = false;
-          submitBtn.style.pointerEvents = '';
         }, 1200);
       }
 
@@ -1623,15 +1615,9 @@ const App = {
       this.clearPosForm(true, summaryText);
       this.updateSyncUI();
     } catch (err) {
-      if (err.message && (err.message.includes('ป้องกัน') || err.message.includes('ซ้ำ'))) {
-        console.warn('[POS] Duplicate prevented gracefully:', err.message);
-        this.showToast('บันทึกเรียบร้อยแล้ว (ระบบป้องกันการกดซ้ำ)', 'info');
-      } else {
-        this.showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
-      }
+      this.showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.style.pointerEvents = '';
         submitBtn.classList.remove('opacity-75', 'cursor-not-allowed', 'btn-success');
         if (originalHtml) submitBtn.innerHTML = originalHtml;
       }
@@ -1640,7 +1626,6 @@ const App = {
       this.isSubmittingPos = false;
       if (submitBtn && !submitBtn.classList.contains('btn-success')) {
         submitBtn.disabled = false;
-        submitBtn.style.pointerEvents = '';
         submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
         if (originalHtml && !submitBtn.innerHTML.includes('🎉')) submitBtn.innerHTML = originalHtml;
       }
@@ -2625,11 +2610,6 @@ const App = {
 
   async submitBatchInTransaction() {
     if (this.isSubmittingBatch) return;
-    const now = Date.now();
-    if (this.lastBatchSubmitTime && (now - this.lastBatchSubmitTime) < 2500) {
-      console.warn('[BatchIn] Rapid click detected within 2500ms, ignoring duplicate trigger.');
-      return;
-    }
 
     const validRows = this.batchRows.filter(r => {
       if (r.isNewProduct) {
@@ -2649,12 +2629,9 @@ const App = {
     const role = (user && user.role) ? user.role : 'admin';
     const submitBtn = document.getElementById('btn-submit-batch-in');
 
-    this.isSubmittingBatch = true;
-    this.lastBatchSubmitTime = now;
-
     try {
+      this.isSubmittingBatch = true;
       if (submitBtn) {
-        submitBtn.style.pointerEvents = 'none';
         submitBtn.disabled = true;
         submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
       }
@@ -2692,10 +2669,7 @@ const App = {
         costPrice: Number(r.costPrice) || 0
       }));
 
-      const batchId = 'BATCH-' + Date.now() + '-' + Math.floor(1000 + Math.random() * 9000);
-
       const res = await ApiService.batchAddTransactions({
-        batchId: batchId,
         items: items,
         invoiceNote: note,
         imageBase64: this.batchReceiptBase64,
@@ -2712,7 +2686,6 @@ const App = {
     } finally {
       this.isSubmittingBatch = false;
       if (submitBtn) {
-        submitBtn.style.pointerEvents = '';
         submitBtn.disabled = false;
         submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
       }
@@ -3082,13 +3055,6 @@ const App = {
   },
 
   async receivePreorderToStock(id) {
-    if (this.isReceivingPreorder) return;
-    const now = Date.now();
-    if (this.lastPreorderReceiveTime && (now - this.lastPreorderReceiveTime) < 2500) {
-      console.warn('[Preorder] Rapid receive clicked within 2500ms, ignoring duplicate trigger.');
-      return;
-    }
-
     const item = (this.preorders || []).find(p => p.id === id || p.preorderId === id);
     if (!item) {
       this.showToast('ไม่พบรายการสั่งซื้อร้านส่งนี้', 'error');
@@ -3115,9 +3081,6 @@ const App = {
       `ระบบจะบันทึกรับเข้าคลัง (IN) อัตโนมัติและปรับสถานะเป็น "รับเข้าสต็อกแล้ว"`;
 
     if (!confirm(confirmMsg)) return;
-
-    this.isReceivingPreorder = true;
-    this.lastPreorderReceiveTime = now;
 
     try {
       this.showLoading(true);
@@ -3161,8 +3124,7 @@ const App = {
         costPrice: cost,
         salePrice: targetProduct.salePrice || sale,
         operator: operatorName,
-        note: `รับเข้าจากพรีออเดอร์ร้านส่ง [${item.id || item.preorderId}] ${supplier}${item.trackingNo ? ' (' + item.trackingNo + ')' : ''}`,
-        clientTransId: 'TX-PRE-' + (item.id || item.preorderId) + '-' + Date.now()
+        note: `รับเข้าจากพรีออเดอร์ร้านส่ง [${item.id || item.preorderId}] ${supplier}${item.trackingNo ? ' (' + item.trackingNo + ')' : ''}`
       };
 
       await ApiService.addTransaction(transData);
@@ -3181,7 +3143,6 @@ const App = {
       console.error('receivePreorderToStock error:', err);
       this.showToast('เกิดข้อผิดพลาดในการรับเข้าสต็อก: ' + err.message, 'error');
     } finally {
-      this.isReceivingPreorder = false;
       this.showLoading(false);
     }
   },

@@ -5,9 +5,8 @@
 
 const OptimisticEngine = {
   _recentFingerprints: new Map(),
-  _inFlightPromises: new Map(),
 
-  _checkAndLock(fingerprint, cooldownMs = 2500) {
+  _checkAndLock(fingerprint, cooldownMs = 1200) {
     const now = Date.now();
     const lastTime = this._recentFingerprints.get(fingerprint);
     if (lastTime && (now - lastTime) < cooldownMs) {
@@ -26,18 +25,10 @@ const OptimisticEngine = {
   /**
    * ตัดสต็อกเบิกขาย (Stock OUT) แบบ Optimistic 0ms
    */
-  async executeStockOut({ productId, quantity, customPrice, operator, note, imageBase64, clientTransId }) {
+  async executeStockOut({ productId, quantity, customPrice, operator, note, imageBase64 }) {
     const fingerprint = `OUT:${productId}:${quantity}:${customPrice !== null && customPrice !== undefined ? customPrice : ''}`;
-
-    // ถ้ามีรายการเดียวกันกำลังส่งขึ้น Cloud อยู่ (In-Flight) ให้รอ Promise เดิมร่วมกัน ป้องกันยิงเบิ้ล 100%
-    if (this._inFlightPromises && this._inFlightPromises.has(fingerprint)) {
-      console.warn(`[OptimisticEngine] In-flight transaction detected for ${fingerprint}, joining active promise...`);
-      return await this._inFlightPromises.get(fingerprint);
-    }
-
-    if (!this._checkAndLock(fingerprint, 2500)) {
-      console.warn(`[OptimisticEngine] Duplicate identical transaction suppressed (${fingerprint})`);
-      return { success: true, message: 'รายการถูกบันทึกเรียบร้อยแล้ว (ป้องกันการกดซ้ำ)', duplicatePrevented: true };
+    if (!this._checkAndLock(fingerprint)) {
+      throw new Error('ตรวจพบการกดทำรายการซ้ำในเสี้ยววินาที ระบบระงับรายการซ้ำเพื่อป้องกันข้อมูลเบิ้ล');
     }
 
     const store = window.appStore;
@@ -58,10 +49,10 @@ const OptimisticEngine = {
     const totalRevenue = quantity * salePrice;
     const totalCost = quantity * costPrice;
     const profit = totalRevenue - totalCost;
-    const transId = clientTransId || ('TX-' + Date.now() + '-' + Math.floor(Math.random() * 10000));
+    const tempTransId = 'TEMP-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
 
     const optimisticTx = {
-      transId: transId,
+      transId: tempTransId,
       timestamp: new Date().toISOString(),
       productId: product.productId,
       productName: product.productName,
@@ -97,87 +88,70 @@ const OptimisticEngine = {
     store.broadcast('PRODUCT_UPDATED', product);
     store.broadcast('TRANSACTION_ADDED', optimisticTx);
 
-    // 4. บันทึกขึ้น Cloud ในเบื้องหลัง พร้อม In-Flight Promise Guard
-    const cloudPromise = (async () => {
-      try {
-        const res = await ApiService.addTransaction({
-          productId,
-          type: 'OUT',
-          quantity,
-          salePrice,
-          operator,
-          note,
-          imageBase64,
-          clientTransId: transId,
-          transId: transId
-        });
+    // 4. บันทึกขึ้น Cloud ในเบื้องหลัง
+    try {
+      const res = await ApiService.addTransaction({
+        productId,
+        type: 'OUT',
+        quantity,
+        salePrice,
+        operator,
+        note,
+        imageBase64
+      });
 
-        // Reconcile ID ชั่วคราวเป็น ID จริงจากฐานข้อมูล
-        const realId = res.transId || transId;
-        optimisticTx.transId = realId;
-        optimisticTx.isOptimistic = false;
-        updateTransactionDOMId(transId, realId);
+      // Reconcile ID ชั่วคราวเป็น ID จริงจากฐานข้อมูล
+      const realId = res.transId || ('TRX-' + Date.now());
+      optimisticTx.transId = realId;
+      optimisticTx.isOptimistic = false;
+      updateTransactionDOMId(tempTransId, realId);
 
-        // กระจายบอกแท็บอื่นว่าสลับ ID แล้ว เพื่อป้องกันรายการเบิ้ลเมื่อ Realtime วิ่งมา
-        store.broadcast('TRANSACTION_RECONCILED', { tempTransId: transId, realTransId: realId, productId });
-        showFlashNotice('✅ บันทึกขึ้น Cloud สมบูรณ์!', 'success');
-        return res;
-      } catch (err) {
-        // 5. INVERSE DELTA ROLLBACK: คืนค่าเฉพาะรายการที่ล้มเหลว
-        product.currentStock = (Number(product.currentStock) || 0) + quantity;
-        product.lastUpdated = new Date().toISOString();
+      // กระจายบอกแท็บอื่นว่าสลับ ID แล้ว เพื่อป้องกันรายการเบิ้ลเมื่อ Realtime วิ่งมา
+      store.broadcast('TRANSACTION_RECONCILED', { tempTransId, realTransId: realId, productId });
+      showFlashNotice('✅ บันทึกขึ้น Cloud สมบูรณ์!', 'success');
+      return res;
+    } catch (err) {
+      // 5. INVERSE DELTA ROLLBACK: คืนค่าเฉพาะรายการที่ล้มเหลว
+      product.currentStock = (Number(product.currentStock) || 0) + quantity;
+      product.lastUpdated = new Date().toISOString();
 
-        const txIndex = store.getState('transactions').findIndex((t) => t.transId === transId);
-        if (txIndex !== -1) {
-          store.getState('transactions').splice(txIndex, 1);
-        }
-
-        store.recalculateSummary();
-        patchProductRowDOM(product);
-        removeTransactionRowDOM(transId);
-        updateSummaryBadgesDOM(store.getState('summary'));
-        if (typeof App !== 'undefined') {
-          if (App.renderPosSearchResults) App.renderPosSearchResults();
-          const currentSelected = document.getElementById('pos-product-select')?.value;
-          if (currentSelected === productId && App.updatePosProductInfo) {
-            App.updatePosProductInfo(productId);
-          }
-        }
-
-        // 6. ส่งข้อความชดเชยบอกแท็บอื่นให้คืนค่าตามทันที
-        store.broadcast('TRANSACTION_ROLLBACK', {
-          productId,
-          restoredStock: product.currentStock,
-          tempTransId: transId,
-          quantity
-        });
-
-        showFlashNotice('❌ บันทึกล้มเหลว: ' + err.message + ' (ระบบคืนสต็อกหน้าร้านแล้ว)', 'error');
-        throw err;
-      } finally {
-        if (this._inFlightPromises) this._inFlightPromises.delete(fingerprint);
+      const txIndex = store.getState('transactions').findIndex((t) => t.transId === tempTransId);
+      if (txIndex !== -1) {
+        store.getState('transactions').splice(txIndex, 1);
       }
-    })();
 
-    if (this._inFlightPromises) this._inFlightPromises.set(fingerprint, cloudPromise);
-    return await cloudPromise;
+      store.recalculateSummary();
+      patchProductRowDOM(product);
+      removeTransactionRowDOM(tempTransId);
+      updateSummaryBadgesDOM(store.getState('summary'));
+      if (typeof App !== 'undefined') {
+        if (App.renderPosSearchResults) App.renderPosSearchResults();
+        const currentSelected = document.getElementById('pos-product-select')?.value;
+        if (currentSelected === productId && App.updatePosProductInfo) {
+          App.updatePosProductInfo(productId);
+        }
+      }
+
+      // 6. ส่งข้อความชดเชยบอกแท็บอื่นให้คืนค่าตามทันที
+      store.broadcast('TRANSACTION_ROLLBACK', {
+        productId,
+        restoredStock: product.currentStock,
+        tempTransId,
+        quantity
+      });
+
+      showFlashNotice('❌ บันทึกล้มเหลว: ' + err.message + ' (ระบบคืนสต็อกหน้าร้านแล้ว)', 'error');
+      throw err;
+    }
   },
 
   /**
    * รับสินค้าเข้าคลัง (Stock IN) แบบ Optimistic 0ms พร้อม WAC ถ่วงน้ำหนัก
    */
-  async executeStockIn({ productId, quantity, costPrice, operator, note, imageBase64, clientTransId }) {
+  async executeStockIn({ productId, quantity, costPrice, operator, note, imageBase64 }) {
     const fingerprint = `IN:${productId}:${quantity}:${costPrice !== null && costPrice !== undefined ? costPrice : ''}`;
-
-    // ถ้ามีรายการเดียวกันกำลังส่งขึ้น Cloud อยู่ (In-Flight) ให้รอ Promise เดิมร่วมกัน ป้องกันยิงเบิ้ล 100%
-    if (this._inFlightPromises && this._inFlightPromises.has(fingerprint)) {
-      console.warn(`[OptimisticEngine] In-flight transaction detected for ${fingerprint}, joining active promise...`);
-      return await this._inFlightPromises.get(fingerprint);
-    }
-
-    if (!this._checkAndLock(fingerprint, 2500)) {
-      console.warn(`[OptimisticEngine] Duplicate identical transaction suppressed (${fingerprint})`);
-      return { success: true, message: 'รายการถูกบันทึกเรียบร้อยแล้ว (ป้องกันการกดซ้ำ)', duplicatePrevented: true };
+    if (!this._checkAndLock(fingerprint)) {
+      throw new Error('ตรวจพบการกดทำรายการซ้ำในเสี้ยววินาที ระบบระงับรายการซ้ำเพื่อป้องกันข้อมูลเบิ้ล');
     }
 
     const store = window.appStore;
@@ -200,9 +174,9 @@ const OptimisticEngine = {
     product.marginPercent = product.salePrice > 0 ? Number(((product.profitPerUnit / product.salePrice) * 100).toFixed(2)) : 0;
     product.lastUpdated = new Date().toISOString();
 
-    const transId = clientTransId || ('TX-' + Date.now() + '-' + Math.floor(Math.random() * 10000));
+    const tempTransId = 'TEMP-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
     const optimisticTx = {
-      transId: transId,
+      transId: tempTransId,
       timestamp: new Date().toISOString(),
       productId: product.productId,
       productName: product.productName,
@@ -236,66 +210,57 @@ const OptimisticEngine = {
     store.broadcast('PRODUCT_UPDATED', product);
     store.broadcast('TRANSACTION_ADDED', optimisticTx);
 
-    const cloudPromise = (async () => {
-      try {
-        const res = await ApiService.addTransaction({
-          productId,
-          type: 'IN',
-          quantity: inQty,
-          costPrice: inCost,
-          operator,
-          note,
-          imageBase64,
-          clientTransId: transId,
-          transId: transId
-        });
+    try {
+      const res = await ApiService.addTransaction({
+        productId,
+        type: 'IN',
+        quantity: inQty,
+        costPrice: inCost,
+        operator,
+        note,
+        imageBase64
+      });
 
-        const realId = res.transId || transId;
-        optimisticTx.transId = realId;
-        optimisticTx.isOptimistic = false;
-        updateTransactionDOMId(transId, realId);
+      const realId = res.transId || ('TRX-' + Date.now());
+      optimisticTx.transId = realId;
+      optimisticTx.isOptimistic = false;
+      updateTransactionDOMId(tempTransId, realId);
 
-        store.broadcast('TRANSACTION_RECONCILED', { tempTransId: transId, realTransId: realId, productId });
-        showFlashNotice('✅ บันทึกรับเข้าขึ้น Cloud สมบูรณ์!', 'success');
-        return res;
-      } catch (err) {
-        // Rollback
-        product.currentStock = oldStock;
-        product.costPrice = oldCost;
-        product.profitPerUnit = Number((product.salePrice - oldCost).toFixed(2));
-        product.marginPercent = product.salePrice > 0 ? Number(((product.profitPerUnit / product.salePrice) * 100).toFixed(2)) : 0;
+      store.broadcast('TRANSACTION_RECONCILED', { tempTransId, realTransId: realId, productId });
+      showFlashNotice('✅ บันทึกรับเข้าขึ้น Cloud สมบูรณ์!', 'success');
+      return res;
+    } catch (err) {
+      // Rollback
+      product.currentStock = oldStock;
+      product.costPrice = oldCost;
+      product.profitPerUnit = Number((product.salePrice - oldCost).toFixed(2));
+      product.marginPercent = product.salePrice > 0 ? Number(((product.profitPerUnit / product.salePrice) * 100).toFixed(2)) : 0;
 
-        const txIndex = store.getState('transactions').findIndex((t) => t.transId === transId);
-        if (txIndex !== -1) store.getState('transactions').splice(txIndex, 1);
+      const txIndex = store.getState('transactions').findIndex((t) => t.transId === tempTransId);
+      if (txIndex !== -1) store.getState('transactions').splice(txIndex, 1);
 
-        store.recalculateSummary();
-        patchProductRowDOM(product);
-        removeTransactionRowDOM(transId);
-        updateSummaryBadgesDOM(store.getState('summary'));
-        if (typeof App !== 'undefined') {
-          if (App.renderPosSearchResults) App.renderPosSearchResults();
-          const currentSelected = document.getElementById('pos-product-select')?.value;
-          if (currentSelected === productId && App.updatePosProductInfo) {
-            App.updatePosProductInfo(productId);
-          }
+      store.recalculateSummary();
+      patchProductRowDOM(product);
+      removeTransactionRowDOM(tempTransId);
+      updateSummaryBadgesDOM(store.getState('summary'));
+      if (typeof App !== 'undefined') {
+        if (App.renderPosSearchResults) App.renderPosSearchResults();
+        const currentSelected = document.getElementById('pos-product-select')?.value;
+        if (currentSelected === productId && App.updatePosProductInfo) {
+          App.updatePosProductInfo(productId);
         }
-
-        store.broadcast('TRANSACTION_ROLLBACK', {
-          productId,
-          restoredStock: oldStock,
-          tempTransId: transId,
-          quantity: inQty
-        });
-
-        showFlashNotice('❌ บันทึกล้มเหลว: ' + err.message + ' (ระบบคืนสต็อกหน้าร้านแล้ว)', 'error');
-        throw err;
-      } finally {
-        if (this._inFlightPromises) this._inFlightPromises.delete(fingerprint);
       }
-    })();
 
-    if (this._inFlightPromises) this._inFlightPromises.set(fingerprint, cloudPromise);
-    return await cloudPromise;
+      store.broadcast('TRANSACTION_ROLLBACK', {
+        productId,
+        restoredStock: oldStock,
+        tempTransId,
+        quantity: inQty
+      });
+
+      showFlashNotice('❌ บันทึกล้มเหลว: ' + err.message, 'error');
+      throw err;
+    }
   },
 
   /**
