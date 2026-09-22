@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 let db, adminToken, staffToken;
-const migration = readFileSync('supabase/migrations/'+readdirSync('supabase/migrations').find(x=>x.endsWith('_stock_only.sql')),'utf8');
+const migrations = readdirSync('supabase/migrations').filter(x=>x.endsWith('.sql')).sort().map(x=>readFileSync('supabase/migrations/'+x,'utf8'));
 before(async()=>{
   db = new PGlite();
   // PGlite does not ship pgcrypto. Only the password primitive is replaced here;
@@ -11,7 +11,7 @@ before(async()=>{
   await db.exec("create role anon; create role authenticated; create schema extensions; "+
     "create function extensions.gen_salt(text,integer) returns text language sql as $$ select 'test-salt'::text $$; "+
     "create function extensions.crypt(text,text) returns text language sql strict as $$ select '$2-test$'||md5($1) $$;");
-  await db.exec(migration.replace('create extension if not exists pgcrypto with schema extensions;',''));
+  for(const migration of migrations) await db.exec(migration.replace('create extension if not exists pgcrypto with schema extensions;',''));
 });
 beforeEach(async()=>{
   await db.exec("reset role; truncate stock_private.sessions,stock_private.login_attempts,stock_private.documents,stock_private.audit,public.transactions,public.products,public.users cascade;");
@@ -64,6 +64,17 @@ test('weighted average and stock-only issue preserve inventory valuation',async(
   assert.equal((await stock()).stock,16);assert.equal((await stock()).cost,150);
   const history=await request(adminToken,'history');
   assert.equal(history[0].operator,'staff');assert.equal(history[0].totalCost,600);
+});
+test('sale price remains reference data across stock movements',async()=>{
+  await request(adminToken,'productSave',{productId:'A',name:'สินค้า A',category:'ของเล่น',unit:'ชิ้น',minAlert:5,active:true,salePrice:890});
+  assert.equal((await stock()).salePrice,890);
+  assert.equal((await request(staffToken,'products'))[0].salePrice,890);
+  await post(staffToken,doc('IN',[{productId:'A',quantity:2}]));
+  await post(staffToken,doc('OUT',[{productId:'A',quantity:1}]));
+  assert.equal((await stock()).salePrice,890);
+  for(const salePrice of [-1,'NaN','100.999',1000000000])
+    await assert.rejects(request(adminToken,'productSave',{productId:'B',name:'สินค้า B',minAlert:5,salePrice}));
+  await assert.rejects(request(staffToken,'productSave',{productId:'A',name:'สินค้า A',minAlert:5,salePrice:1}),/ผู้ดูแล/);
 });
 test('zero-cost receipt participates in weighted average',async()=>{
   await product();await post(adminToken,doc('IN',[{productId:'A',quantity:10,cost:100}]));
@@ -157,3 +168,4 @@ test('history dates use Bangkok boundaries and CSV snapshot timestamp',async()=>
   const rows=await request(adminToken,'history',{from:'2026-09-22',to:'2026-09-22',asOf:'2026-09-23T00:00:00Z'});
   assert.deepEqual(rows.map(x=>x.id),['inside']);
 });
+
