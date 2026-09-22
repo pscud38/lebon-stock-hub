@@ -82,7 +82,7 @@ async function refresh() {
 async function showPage(name) {
   if (['users','audit'].includes(name) && !admin()) return;
   page = name;
-  const titles = { inventory:'สินค้าคงเหลือ',movement:'รับเข้า / เบิกออก',history:'ประวัติความเคลื่อนไหว',queue:'รายการรอส่ง',users:'ผู้ใช้งาน',audit:'ประวัติการแก้ไข' };
+  const titles = { inventory:'ภาพรวม / คลังสินค้า',movement:'รับเข้า / เบิกออก',history:'ประวัติความเคลื่อนไหว',queue:'รายการรอส่ง',users:'ผู้ใช้งาน',audit:'ประวัติการแก้ไข' };
   document.querySelectorAll('[data-section]').forEach(s => s.hidden = s.dataset.section !== name);
   document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('selected', b.dataset.page === name));
   $('page-title').textContent = titles[name];
@@ -115,6 +115,7 @@ function renderProducts() {
     const text = el('div'); text.append(el('strong', p.name),el('small',p.productId)); wrap.append(text); name.append(wrap);
     cell(row,p.category); cell(row,num(p.stock) + ' ' + p.unit); cell(row,num(p.minAlert));
     if (admin()) cell(row,'฿' + num(p.cost));
+    cell(row,'฿' + num(p.salePrice));
     const state = cell(row,''); state.append(el('span',!p.active?'ปิดใช้งาน':Number(p.stock)===0?'หมด':p.stock<=p.minAlert?'ใกล้หมด':'พร้อมใช้งาน',
       {className:'badge' + (!p.active || Number(p.stock)===0?' off':p.stock<=p.minAlert?' warn':'')}));
     const actions = cell(row,'');
@@ -122,7 +123,7 @@ function renderProducts() {
     if (admin()) actions.append(button('แก้ไข',() => openProduct(p)));
     body.append(row);
   });
-  empty(body,'ไม่พบสินค้า',admin()?7:6);
+  empty(body,'ไม่พบสินค้า',admin()?8:7);
 }
 function addLine(code) {
   const p = products.find(x => x.productId.toLowerCase() === code.trim().toLowerCase() && x.active);
@@ -221,7 +222,7 @@ function openDialog(id) {
 function openProduct(p = null) {
   editing = p;
   const form = $('product-form'); form.reset();
-  if (p) for (const key of ['productId','name','category','unit','minAlert','note','active']) form.elements[key].value = p[key];
+  if (p) for (const key of ['productId','name','category','unit','salePrice','minAlert','note','active']) form.elements[key].value = p[key];
   form.elements.productId.readOnly=!!p; openDialog('product-dialog');
 }
 async function compress(file) {
@@ -328,8 +329,8 @@ action('scan-search','click',()=>startScanner(code=>{$('search').value=code;rend
 action('scan-line','click',()=>startScanner(addLine));
 action('export-stock','click',()=>{
   const headings=['รหัสสินค้า','ชื่อสินค้า','หมวดหมู่','หน่วย','คงเหลือ','จุดแจ้งเตือน','สถานะ'];
-  if(admin())headings.push('ต้นทุนเฉลี่ย','มูลค่าสต็อก');
-  const rows=filteredProducts().map(p=>{const row=[p.productId,p.name,p.category,p.unit,p.stock,p.minAlert,p.active?'ใช้งาน':'ปิดใช้งาน'];if(admin())row.push(p.cost,p.cost*p.stock);return row;});
+  headings.push('ราคาขาย');if(admin())headings.push('ต้นทุนเฉลี่ย','มูลค่าสต็อก');
+  const rows=filteredProducts().map(p=>{const row=[p.productId,p.name,p.category,p.unit,p.stock,p.minAlert,p.active?'ใช้งาน':'ปิดใช้งาน'];row.push(p.salePrice);if(admin())row.push(p.cost,p.cost*p.stock);return row;});
   download('stock-'+bangkokDay()+'.csv',csv([headings,...rows]));
 });
 action('export-history','click',async()=>{
@@ -357,3 +358,4 @@ if(localStorage.getItem('stock_offline_sync_queue') && localStorage.getItem('sto
 try{session=JSON.parse(sessionStorage.getItem(config.sessionKey));if(session){await enter();}}catch(e){clearSession();$('login-error').textContent=e.message;}
 // Replace the legacy worker so old pages cannot remain cached after cutover.
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).catch(()=>{});
+

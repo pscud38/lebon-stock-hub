@@ -7,8 +7,10 @@ const db=new PGlite();
 await db.exec("create role anon;create role authenticated;create schema extensions;"+
  "create function extensions.gen_salt(text,integer) returns text language sql as $$ select 'salt'::text $$;"+
  "create function extensions.crypt(text,text) returns text language sql strict as $$ select '$2-test$'||md5($1) $$;");
-let sql=readFileSync('supabase/migrations/'+readdirSync('supabase/migrations').find(x=>x.endsWith('_stock_only.sql')),'utf8');
-await db.exec(sql.replace('create extension if not exists pgcrypto with schema extensions;',''));
+for(const name of readdirSync('supabase/migrations').filter(x=>x.endsWith('.sql')).sort()){
+ const sql=readFileSync('supabase/migrations/'+name,'utf8');
+ await db.exec(sql.replace('create extension if not exists pgcrypto with schema extensions;',''));
+}
 await db.exec("insert into users(username,password,full_name,role,status) values"+
  "('admin',extensions.crypt('test123456','salt'),'ผู้ดูแลทดสอบ','admin','active'),"+
  "('staff',extensions.crypt('test123456','salt'),'พนักงานทดสอบ','staff','active');"+
@@ -48,6 +50,12 @@ try{
  await page.goto('http://127.0.0.1:4178');
  await login('admin');
  assert.equal(await page.locator('#stat-products').innerText(),'3');
+ assert.equal(await page.locator('#product-form input[name=salePrice]').count(),1);
+ await page.locator('#product-rows button').filter({hasText:'แก้ไข'}).first().click();
+ await page.locator('#product-form input[name=salePrice]').fill('890');
+ await page.locator('#product-form button[type=submit]').click();
+ await page.waitForFunction(()=>document.querySelector('#product-rows')?.textContent.includes('890'));
+ assert.equal((await db.query("select sale_price from products where product_id='TOY-001'")).rows[0].sale_price,'890');
  await addLine('IN',5);
  await page.locator('#movement-lines input').nth(1).fill('200');
  await page.locator('#movement-form button[type=submit]').click();
@@ -71,22 +79,27 @@ try{
  assert.equal((await db.query("select current_stock from products where product_id='TOY-001'")).rows[0].current_stock,'12');
  // Admin inventory desktop and mobile layout.
  await page.locator('[data-page=inventory]').click();
+ assert.equal(await page.locator('nav button.selected').getAttribute('data-page'),'inventory');
  mkdirSync('test-results',{recursive:true});
  await page.screenshot({path:'test-results/inventory-desktop.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
  await page.screenshot({path:'test-results/inventory-mobile.png',fullPage:true});
+ assert.ok(await page.evaluate(()=>{const nav=document.querySelector('nav').getBoundingClientRect(),logout=document.querySelector('#logout').getBoundingClientRect();return nav.top>innerHeight-100&&logout.bottom<nav.top;}));
+ assert.equal(await page.locator('#change-password').isVisible(),true);
  await page.locator('#logout').click();await page.locator('#login-view').waitFor({state:'visible'});
  await login('staff');
  assert.equal(await page.locator('[data-page=users]').isVisible(),false);
  assert.equal(await page.locator('#stat-value').isVisible(),false);
- assert.equal(await page.locator('#product-rows').innerText().then(x=>x.includes('฿')),false);
+ assert.equal(await page.locator('#product-rows').innerText().then(x=>x.includes('฿890')),true);
+ assert.equal(await page.locator('th[data-admin]').isVisible(),false);
  await addLine('OUT',1);
  assert.equal(await page.locator('#movement-lines input').count(),1);
  const visible=await page.locator('body').innerText();
- assert.ok(!/Google Sheets|กำไร|ราคาขาย|POS/.test(visible));
+ assert.ok(!/Google Sheets|กำไร|POS/.test(visible));
  assert.deepEqual(errors,[]);
  console.log('PASS browser: admin receipt/issue/history, network retry, staff cost hiding, desktop/mobile layout; no page errors.');
 }finally{
  await browser.close();await server.close();await db.close();
 }
+
