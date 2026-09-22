@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env*
+!.env.example
+backups/
+*.backup.json
+test-results/
+.supabase/
+supabase/.temp/
