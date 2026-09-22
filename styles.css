@@ -1,0 +1,241 @@
+/* ========================================================================= */
+/* LEBON TOY STOCK HUB - PREMIUM NEO-RETAIL DESIGN SYSTEM                     */
+/* ========================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --font-sans: 'Prompt', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-numeric: 'Inter', 'Prompt', -apple-system, sans-serif;
+}
+
+* {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.tabular-nums {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Lucide Icons Helper */
+svg.lucide {
+  display: inline-block;
+  vertical-align: middle;
+  stroke-width: 2px;
+}
+
+/* QR Scanner Box Overlay */
+#pos-qr-reader {
+  border: none !important;
+  border-radius: 1.25rem;
+  overflow: hidden;
+}
+#pos-qr-reader__scan_region {
+  background: rgba(0, 0, 0, 0.03);
+}
+#pos-qr-reader__dashboard {
+  padding-top: 10px;
+}
+
+/* Smooth Page Transitions */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.tab-page:not(.hidden) {
+  animation: pageEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Glassmorphism Panels */
+.glass-card {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+}
+
+.glass-header {
+  background-color: #0f172a;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Bento Stats Cards */
+.bento-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bento-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+}
+
+.bento-blue {
+  background: linear-gradient(145deg, #F0F7FF 0%, #FFFFFF 65%);
+}
+.bento-emerald {
+  background: linear-gradient(145deg, #ECFDF5 0%, #FFFFFF 65%);
+}
+.bento-indigo {
+  background: linear-gradient(145deg, #EEF2FF 0%, #FFFFFF 65%);
+}
+.bento-rose {
+  background: linear-gradient(145deg, #FFF1F2 0%, #FFFFFF 65%);
+}
+
+/* Quick Stepper Buttons for POS */
+.pos-stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: all 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+}
+.pos-stepper-btn:active {
+  transform: scale(0.92);
+}
+
+/* Glow Primary Button */
+.btn-submit-glow {
+  background-color: #4F46E5 !important;
+  background-image: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #7C3AED 100%) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 8px 24px -4px rgba(79, 70, 229, 0.45);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-submit-glow:hover {
+  box-shadow: 0 12px 30px -4px rgba(79, 70, 229, 0.55);
+  transform: translateY(-1px);
+}
+.btn-submit-glow:active {
+  transform: scale(0.99);
+}
+.btn-submit-glow.btn-success {
+  background-color: #059669 !important;
+  background-image: linear-gradient(135deg, #059669 0%, #10B981 50%, #14B8A6 100%) !important;
+  box-shadow: 0 8px 24px -4px rgba(16, 185, 129, 0.45) !important;
+}
+
+/* Reason Pills */
+.pos-reason-pill {
+  transition: all 0.15s ease;
+  user-select: none;
+  touch-action: manipulation;
+}
+.pos-reason-pill:active {
+  transform: scale(0.95);
+}
+.pos-reason-pill.active-pill {
+  background: #4F46E5 !important;
+  color: #FFFFFF !important;
+  border-color: #4338CA !important;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3) !important;
+}
+
+/* Mobile Bottom Navigation */
+.mobile-bottom-nav {
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.06);
+}
+.mobile-nav-btn {
+  touch-action: manipulation;
+  transition: all 0.15s ease;
+}
+.mobile-nav-btn:active {
+  transform: scale(0.92);
+}
+.mobile-nav-btn.active-mobile-tab {
+  color: #4F46E5;
+  font-weight: 700;
+}
+.mobile-nav-btn.active-mobile-tab .mobile-tab-indicator {
+  opacity: 1 !important;
+  transform: scaleX(1);
+}
+
+/* Modern Pill Badges */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Print Stylesheet for Reports */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  header, nav, #toast-container, .no-print, button, .nav-btn, .mobile-bottom-nav {
+    display: none !important;
+  }
+
+  .tab-page {
+    display: block !important;
+  }
+
+  #page-dashboard, #page-products, #page-pos, #page-history, #page-settings {
+    display: none !important;
+  }
+
+  #page-reports {
+    display: block !important;
+    padding: 0 !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .card, .bg-white {
+    box-shadow: none !important;
+    border: 1px solid #E2E8F0 !important;
+  }
+}
