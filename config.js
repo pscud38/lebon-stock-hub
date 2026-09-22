@@ -7,10 +7,8 @@ const CONFIG = {
   SHOP_NAME: 'Lebon Toy',
   SUPABASE_URL: 'https://wnfphiyumdsiukmdatld.supabase.co',
   SUPABASE_KEY: 'sb_publishable_4E3ft90p5-PLuAUq1PglVw_R_5SR_gH',
-  DEFAULT_API_URL: 'https://script.google.com/macros/s/AKfycbzz8KQswE5FvwnicE3QhHKbIqO1j-kdVlVIsjAd4WBZG4JBBWNFRsoxhYoSHL6ZwwjhfQ/exec',
 
   STORAGE_KEYS: {
-    API_URL: 'stock_sheets_api_url',
     SUPABASE_URL: 'stock_supabase_url',
     SUPABASE_KEY: 'stock_supabase_key',
     PRODUCTS: 'stock_local_products',
@@ -290,20 +288,15 @@ function isSupabaseConfigured() {
 }
 
 function getApiUrl() {
-  if (typeof localStorage !== 'undefined') {
-    return localStorage.getItem(CONFIG.STORAGE_KEYS.API_URL) || CONFIG.DEFAULT_API_URL;
-  }
-  return CONFIG.DEFAULT_API_URL;
+  return '';
 }
 
 function setApiUrl(url) {
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(CONFIG.STORAGE_KEYS.API_URL, url.trim());
-  }
+  // Deprecated: Migrated to Supabase
 }
 
 function isOnlineMode() {
-  return isSupabaseConfigured() || !!getApiUrl();
+  return isSupabaseConfigured();
 }
 
 if (typeof module !== 'undefined' && module.exports) {

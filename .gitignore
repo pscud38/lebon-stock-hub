@@ -1,9 +1,19 @@
-node_modules/
-dist/
-.env*
-!.env.example
+# Sensitive Data & Backups
 backups/
 *.backup.json
+*.bak
+*.tmp
+*.sql
+live_data_backup.json
+restore_database.sql
+
+# Environment & Dependencies
+.env*
+node_modules/
+dist/
+
+# Zip Archives & Temp Files
+*.zip
 test-results/
-.supabase/
-supabase/.temp/
+.DS_Store
+Thumbs.db

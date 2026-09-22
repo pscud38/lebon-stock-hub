@@ -1,5 +1,6 @@
 /**
  * Authentication & Role-Based Access Control (RBAC) Module
+ * Dedicated to Supabase Server-Side Authentication
  */
 
 const AuthManager = {
@@ -26,84 +27,57 @@ const AuthManager = {
   },
 
   /**
-   * ล็อกอินเข้าสู่ระบบ (Server-Side Authentication via Supabase RPC)
+   * ล็อกอินเข้าสู่ระบบ (Server-Side Authentication via Supabase RPC login_user)
    */
   async login(username, password) {
-    const u = username.trim();
-    const p = password.trim();
+    const u = (username || '').trim();
+    const p = (password || '').trim();
 
     if (!u || !p) {
       throw new Error('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
     }
 
-    if (typeof isSupabaseConfigured === 'function' && isSupabaseConfigured()) {
-      try {
-        const { url, key } = getSupabaseConfig();
-        const headers = {
-          'apikey': key,
-          'Authorization': 'Bearer ' + key,
-          'Content-Type': 'application/json'
-        };
+    if (typeof isSupabaseConfigured !== 'function' || !isSupabaseConfigured()) {
+      throw new Error('ยังไม่ได้กำหนดค่าการเชื่อมต่อฐานข้อมูล Supabase');
+    }
 
-        // 1. เรียกใช้ Server-side RPC login_user อย่างปลอดภัย
-        const rpcRes = await fetch(`${url}/rest/v1/rpc/login_user`, {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify({ p_username: u, p_password: p })
-        });
+    try {
+      const { url, key } = getSupabaseConfig();
+      const headers = {
+        'apikey': key,
+        'Authorization': 'Bearer ' + key,
+        'Content-Type': 'application/json'
+      };
 
-        if (rpcRes.ok) {
-          const result = await rpcRes.json();
-          if (result && result.success && result.user) {
-            this.setCurrentUser(result.user);
-            return result.user;
-          } else {
-            const authErr = new Error(result?.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-            authErr.isAuthRejection = true;
-            throw authErr;
-          }
+      // เรียกใช้ Server-side RPC login_user
+      const rpcRes = await fetch(`${url}/rest/v1/rpc/login_user`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ p_username: u, p_password: p })
+      });
+
+      if (rpcRes.ok) {
+        const result = await rpcRes.json();
+        if (result && result.success && result.user) {
+          this.setCurrentUser(result.user);
+          return result.user;
         } else {
-          const authErr = new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+          const errMsg = result?.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+          const authErr = new Error(errMsg);
           authErr.isAuthRejection = true;
           throw authErr;
         }
-      } catch (err) {
-        if (err && err.isAuthRejection) throw err;
-        console.warn('Supabase login communication error:', err);
-      }
-    }
-
-    const apiUrl = getApiUrl();
-    if (apiUrl) {
-      try {
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'login',
-            username: u,
-            password: p
-          })
-        });
-        const json = await response.json();
-        if (json.success && json.user) {
-          this.setCurrentUser(json.user);
-          return json.user;
-        } else {
-          const authErr = new Error(json.error || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-          authErr.isAuthRejection = true;
-          throw authErr;
+      } else {
+        const errJson = await rpcRes.json().catch(() => null);
+        if (rpcRes.status === 401 || rpcRes.status === 403) {
+          throw new Error('สิทธิ์การเข้าถึงฐานข้อมูลถูกปฏิเสธ (ตรวจสอบสิทธิ์ login_user)');
         }
-      } catch (err) {
-        if (err && err.isAuthRejection) {
-          throw err;
-        }
-        console.warn('API login network failure:', err);
+        throw new Error(errJson?.message || 'ไม่สามารถเชื่อมต่อฐานข้อมูลยืนยันตัวตนได้ (' + rpcRes.status + ')');
       }
+    } catch (err) {
+      console.warn('Supabase login error:', err);
+      throw err;
     }
-
-    // Fail-closed: ไม่อนุญาตให้ล็อกอินหากไม่มีการยืนยันตัวตนจากฐานข้อมูล (ลบ Backdoor credentials ออก 100%)
-    throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือไม่สามารถเชื่อมต่อฐานข้อมูลยืนยันตัวตนได้');
   },
 
   setCurrentUser(user) {
@@ -140,7 +114,7 @@ const AuthManager = {
 
     // กำหนดสิทธิ์การแสดงผลตาม Role
     if (user.role !== 'admin') {
-      // ซ่อนต้นทุนและกำไรบางจุดสำหรับ Staff
+      // ซ่อนต้นทุนและกำไรสำหรับ Staff
       document.querySelectorAll('.admin-only').forEach(el => {
         el.classList.add('hidden');
       });

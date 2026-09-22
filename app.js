@@ -2336,7 +2336,7 @@ const App = {
         badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> รอซิงค์ (${count})`;
         badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-full text-xs font-semibold cursor-pointer';
       } else if (isOnlineMode()) {
-        badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> ซิงค์ Google Sheets';
+        badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Supabase Cloud (Live)';
         badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 rounded-full text-xs font-semibold';
       } else {
         badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> โหมดทดลอง (Demo)';
@@ -2347,7 +2347,7 @@ const App = {
 
   async syncOfflineData() {
     if (!navigator.onLine) {
-      this.showToast('ขณะนี้ยังออฟไลน์อยู่ ไม่สามารถซิงค์ขึ้นชีตได้', 'warning');
+      this.showToast('ขณะนี้ยังออฟไลน์อยู่ ไม่สามารถซิงค์ขึ้นฐานข้อมูลได้', 'warning');
       return;
     }
 
@@ -2360,7 +2360,7 @@ const App = {
     try {
       const res = await ApiService.syncOfflineQueue();
       if (res.synced > 0) {
-        this.showToast(`ซิงค์ข้อมูลขึ้น Google Sheets สำเร็จ ${res.synced} รายการ!`, 'success');
+        this.showToast(`ซิงค์ข้อมูลขึ้นฐานข้อมูลสำเร็จ ${res.synced} รายการ!`, 'success');
         await this.refreshData();
       } else if (res.remaining === 0) {
         this.showToast('ไม่มีรายการค้างซิงค์ ข้อมูลล่าสุดสมบูรณ์แล้ว', 'info');

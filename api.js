@@ -32,9 +32,13 @@ function calculateWAC(currentStock, currentCost, inQty, inCost) {
   const sOld = Math.max(0, Number(currentStock) || 0);
   const cOld = Number(currentCost) || 0;
   const qIn = Math.max(0, Number(inQty) || 0);
-  const cIn = (inCost !== undefined && inCost !== null && inCost !== '') ? Math.max(0, Number(inCost)) : 0;
 
   if (qIn <= 0) return cOld;
+
+  const hasInCost = (inCost !== undefined && inCost !== null && inCost !== '' && Number(inCost) > 0);
+  if (!hasInCost) return cOld;
+
+  const cIn = Number(inCost);
   if (sOld <= 0) return Number(cIn.toFixed(2));
 
   const newWac = ((sOld * cOld) + (qIn * cIn)) / (sOld + qIn);
