@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
+  "buildCommand": null,
+  "outputDirectory": ".",
   "rewrites": [
     { "source": "/backups/(.*)", "destination": "/" },
     { "source": "/(.*)\\.sql", "destination": "/" }
