@@ -1,15 +1,14 @@
 /**
- * Lebon Toy Stock Management System - Service Worker v4.0.7 (Hardened Production Release)
+ * Lebon Toy Stock Management System - Service Worker v4.0.8 (Hardened Production Release)
  * Architecture: Strict Separation of Static App Shell and Dynamic REST APIs
  * Features & Remediations:
- *   - Supplier Pre-orders tracking & One-click Stock Receiving
- *   - Async/Await Promise evaluation in navigation fallback (Fixes offline blank screen)
- *   - ignoreSearch: true option in caches.match (Fixes PWA offline query string miss)
- *   - { cache: 'no-cache' } on HTML fetch (Defeats GitHub Pages max-age=600 stale cache)
+ *   - Network-First for Application Scripts (.js, .css) to prevent stale code lock
+ *   - Immediate cache eviction for all outdated versions
+ *   - Storage quota immunity and graceful fallback
  *   - Comprehensive Supabase & Auth API bypass (Network-Only)
  */
 
-const CACHE_NAME = 'lebon-stock-v4.0.7';
+const CACHE_NAME = 'lebon-stock-v4.0.8';
 
 const STATIC_ASSETS = [
   './',
@@ -49,14 +48,24 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.filter((key) => key !== CACHE_NAME).map((key) => {
+          console.log('[SW] Deleting old cache:', key);
+          return caches.delete(key);
+        })
       );
     })
   );
   self.clients.claim();
 });
 
-// 3. Fetch Event: Strict Routing Rules
+// 3. Message Event: Support immediate skipWaiting requests
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING' || (event.data && event.data.action === 'skipWaiting')) {
+    self.skipWaiting();
+  }
+});
+
+// 4. Fetch Event: Strict Routing Rules
 self.addEventListener('fetch', (event) => {
   const url = event.request.url;
 
@@ -94,7 +103,28 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // RULE C: Static Assets -> Stale-While-Revalidate with { ignoreSearch: true }
+  // RULE C: Application Scripts & Styles -> Network-First (Never stale while online, offline fallback)
+  const isAppAsset = (url.endsWith('.js') || url.endsWith('.css') || url.includes('.js?') || url.includes('.css?')) &&
+                     !url.includes('cdn.') && !url.includes('unpkg.com');
+  if (isAppAsset) {
+    event.respondWith(
+      fetch(new Request(event.request, { cache: 'no-cache' }))
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          return cached || (await caches.match(event.request, { ignoreSearch: true }));
+        })
+    );
+    return;
+  }
+
+  // RULE D: Third-Party Libraries & Static Images -> Stale-While-Revalidate with { ignoreSearch: true }
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {

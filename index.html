@@ -47,7 +47,103 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Custom Design System CSS -->
-  <link rel="stylesheet" href="styles.css?v=4.0.7">
+  <link rel="stylesheet" href="styles.css?v=4.0.8">
+
+  <!-- Storage Guard Polyfill & Safe Quota Handler -->
+  <script>
+    (function() {
+      // 1. Monkey-patch Storage.prototype.setItem globally to prevent QuotaExceededError crashes
+      try {
+        const originalSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function(key, value) {
+          try {
+            originalSetItem.call(this, key, value);
+          } catch (err) {
+            const isQuota = err && (
+              err.name === 'QuotaExceededError' ||
+              err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+              (typeof err.message === 'string' && (err.message.toLowerCase().includes('quota') || err.message.includes('exceeded')))
+            );
+            if (isQuota) {
+              console.warn('[StorageGuard] Storage quota exceeded on key "' + key + '". Performing emergency prune...');
+              const txKey = 'stock_local_transactions';
+              try {
+                if (key === txKey) {
+                  try {
+                    const parsed = JSON.parse(value);
+                    if (Array.isArray(parsed)) {
+                      const trimmed = parsed.slice(0, 15).map(function(t) {
+                        const copy = Object.assign({}, t);
+                        if (copy && typeof copy.imageUrl === 'string' && copy.imageUrl.startsWith('data:image')) {
+                          copy.imageUrl = '';
+                        }
+                        return copy;
+                      });
+                      originalSetItem.call(this, txKey, JSON.stringify(trimmed));
+                      return;
+                    }
+                  } catch (_) {
+                    this.removeItem(txKey);
+                    return;
+                  }
+                } else {
+                  this.removeItem(txKey);
+                  try {
+                    originalSetItem.call(this, key, value);
+                    return;
+                  } catch (_) {}
+                }
+              } catch (_) {}
+              // Silently swallow quota error so app NEVER breaks or rolls back
+              console.warn('[StorageGuard] Silently suppressed QuotaExceededError for key "' + key + '"');
+              return;
+            }
+            throw err;
+          }
+        };
+      } catch (e) {
+        console.warn('[StorageGuard] Polyfill init skipped:', e);
+      }
+
+      // 2. Proactive Purge on load: Prune bloated transactions from earlier sessions
+      try {
+        const txKey = 'stock_local_transactions';
+        const raw = localStorage.getItem(txKey);
+        if (raw && (raw.length > 50000 || raw.includes('data:image'))) {
+          console.log('[StorageGuard] Pruning bloated transactions from previous sessions...');
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            const pruned = list.slice(0, 20).map(function(t) {
+              const copy = Object.assign({}, t);
+              if (copy && typeof copy.imageUrl === 'string' && copy.imageUrl.startsWith('data:image')) {
+                copy.imageUrl = '';
+              }
+              return copy;
+            });
+            localStorage.setItem(txKey, JSON.stringify(pruned));
+          } else {
+            localStorage.removeItem(txKey);
+          }
+        }
+      } catch (_) {
+        try { localStorage.removeItem('stock_local_transactions'); } catch (_) {}
+      }
+
+      // 3. Instant URL Reset Trigger (?reset_storage=1 or ?clear_cache=1)
+      try {
+        if (window.location.search && (window.location.search.includes('reset_storage') || window.location.search.includes('clear_cache'))) {
+          console.warn('[StorageGuard] Manual reset requested via URL');
+          localStorage.removeItem('stock_local_transactions');
+          localStorage.removeItem('stock_offline_queue');
+          if ('caches' in window) {
+            caches.keys().then(function(keys) {
+              keys.forEach(function(k) { caches.delete(k); });
+            });
+          }
+        }
+      } catch (_) {}
+    })();
+  </script>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
@@ -1134,6 +1230,19 @@
             </div>
           </div>
 
+          <!-- Cache & Storage Maintenance Card -->
+          <div class="bg-amber-50/80 border border-amber-200 p-5 rounded-2xl space-y-3 text-xs text-amber-950">
+            <div class="font-extrabold flex items-center gap-1.5 text-amber-900 text-sm">
+              <i data-lucide="trash-2" class="w-4 h-4 text-amber-600"></i> ล้างแคชเครื่อง & รีเซ็ตพื้นที่จัดเก็บ
+            </div>
+            <p class="text-slate-600 leading-relaxed">
+              หากระบบแจ้งเตือนพื้นที่ความจำเครื่องเต็ม (Quota Exceeded) หรือต้องการโหลดโค้ดเวอร์ชันล่าสุดทันที สามารถกดปุ่มนี้เพื่อล้างแคชเครื่องและดึงข้อมูลใหม่จาก Cloud ได้
+            </p>
+            <button type="button" onclick="App.clearLocalCache()" class="w-full py-2.5 px-4 rounded-xl font-bold bg-amber-500 hover:bg-amber-600 active:scale-95 text-white shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i> ล้างแคชและอัปเดตระบบเดี๋ยวนี้
+            </button>
+          </div>
+
         </div>
 
       </div>
@@ -1825,22 +1934,52 @@
   </div>
 
   <!-- Application Scripts with Version Cache-Busting -->
-  <script src="config.js?v=4.0.7"></script>
-  <script src="auth.js?v=4.0.7"></script>
-  <script src="api.js?v=4.0.7"></script>
-  <script src="store.js?v=4.0.7"></script>
-  <script src="optimistic.js?v=4.0.7"></script>
-  <script src="scanner.js?v=4.0.7"></script>
-  <script src="reports.js?v=4.0.7"></script>
-  <script src="app.js?v=4.0.7"></script>
+  <script src="config.js?v=4.0.8"></script>
+  <script src="auth.js?v=4.0.8"></script>
+  <script src="api.js?v=4.0.8"></script>
+  <script src="store.js?v=4.0.8"></script>
+  <script src="optimistic.js?v=4.0.8"></script>
+  <script src="scanner.js?v=4.0.8"></script>
+  <script src="reports.js?v=4.0.8"></script>
+  <script src="app.js?v=4.0.8"></script>
 
   <!-- PWA Service Worker Registration & Auto-Update Lifecycle -->
   <script>
+    // Clean old caches aggressively
+    if ('caches' in window) {
+      caches.keys().then((keys) => {
+        keys.forEach((key) => {
+          if (key !== 'lebon-stock-v4.0.8') {
+            console.log('[PWA] Purging outdated cache:', key);
+            caches.delete(key);
+          }
+        });
+      });
+    }
+
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
         try {
           const reg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
           
+          // Force check for updates immediately
+          reg.update().catch(() => {});
+
+          if (reg.waiting) {
+            reg.waiting.postMessage('SKIP_WAITING');
+          }
+
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  newWorker.postMessage('SKIP_WAITING');
+                }
+              });
+            }
+          });
+
           document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
               reg.update().catch(() => {});
@@ -1849,7 +1988,7 @@
 
           setInterval(() => {
             reg.update().catch(() => {});
-          }, 15 * 60 * 1000);
+          }, 5 * 60 * 1000);
 
           let isRefreshing = false;
           let hasController = Boolean(navigator.serviceWorker.controller);
