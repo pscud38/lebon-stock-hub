@@ -24,6 +24,7 @@ const App = {
   isSubmittingPreorder: false,
 
   async init() {
+    this.cleanupLocalStorageQuota();
     this.bindAuth();
     this.bindNavigation();
     this.bindModals();
@@ -47,6 +48,39 @@ const App = {
     ReportsManager.init();
     this.updateConnectionStatus();
     this.refreshIcons();
+  },
+
+  /**
+   * ตรวจสอบและทำความสะอาด LocalStorage เพื่อป้องกัน QuotaExceededError (5MB Limit)
+   */
+  cleanupLocalStorageQuota() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const txKey = (typeof CONFIG !== 'undefined' && CONFIG.STORAGE_KEYS) ? CONFIG.STORAGE_KEYS.TRANSACTIONS : 'stock_local_transactions';
+      const raw = localStorage.getItem(txKey);
+      if (raw && (raw.length > 250000 || raw.includes('data:image'))) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.slice(0, 50).map(t => {
+            if (t && t.imageUrl && typeof t.imageUrl === 'string' && t.imageUrl.startsWith('data:image')) {
+              return { ...t, imageUrl: '' };
+            }
+            return t;
+          });
+          if (typeof safeStorageSet === 'function') {
+            safeStorageSet(txKey, cleaned, 50);
+          } else {
+            localStorage.setItem(txKey, JSON.stringify(cleaned));
+          }
+          console.log('[SafeStorage] Auto-pruned bloated transactions cache from localStorage.');
+        }
+      }
+    } catch (e) {
+      console.warn('[SafeStorage] Error during startup cache hygiene:', e);
+      try {
+        localStorage.removeItem('stock_local_transactions');
+      } catch (_) {}
+    }
   },
 
   /**
