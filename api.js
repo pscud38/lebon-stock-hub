@@ -212,12 +212,12 @@ const ApiService = {
             { username: 'staff', fullName: 'พนักงานหน้าร้าน (Staff)', role: 'staff', status: 'active' }
           ];
 
-          // Save to LocalStorage cache
+          // Save to LocalStorage cache (Protected against quota overflow)
           if (role === 'admin') {
-            if (products.length > 0) localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-            if (transactions.length > 0) localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
-            if (categories.length > 0) localStorage.setItem(CONFIG.STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
-            if (users.length > 0) localStorage.setItem('stock_local_users', JSON.stringify(users));
+            if (products.length > 0) safeStorageSet(CONFIG.STORAGE_KEYS.PRODUCTS, products);
+            if (transactions.length > 0) safeStorageSet(CONFIG.STORAGE_KEYS.TRANSACTIONS, transactions, 50);
+            if (categories.length > 0) safeStorageSet(CONFIG.STORAGE_KEYS.CATEGORIES, categories);
+            if (users.length > 0) safeStorageSet('stock_local_users', users);
           }
 
           const summary = this.calculateSummaryMetrics(products, transactions);
@@ -551,8 +551,12 @@ const ApiService = {
           throw new Error('Failed to insert transaction: ' + iErr);
         }
 
-        // อัปเดต LocalStorage แคชคู่ขนาน
-        this.addLocalTransaction({ role, ...transactionData });
+        // อัปเดต LocalStorage แคชคู่ขนาน (Safe non-blocking)
+        try {
+          this.addLocalTransaction({ role, ...transactionData });
+        } catch (localCacheErr) {
+          console.warn('[ApiService] LocalStorage cache sync skipped (non-fatal, cloud write succeeded):', localCacheErr);
+        }
 
         const roleClean = (role || '').toLowerCase().trim();
         const isExplicitStaff = (roleClean === 'staff' || (roleClean && roleClean !== 'admin'));
@@ -1813,9 +1817,12 @@ const ApiService = {
     };
 
     transactions.unshift(newTrans);
+    if (transactions.length > 50) {
+      transactions = transactions.slice(0, 50);
+    }
 
-    localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-    localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+    safeStorageSet(CONFIG.STORAGE_KEYS.PRODUCTS, products);
+    safeStorageSet(CONFIG.STORAGE_KEYS.TRANSACTIONS, transactions, 50);
 
     const role = (data.role || data.userRole || '').toLowerCase().trim();
     const isExplicitStaff = (role === 'staff' || (role && role !== 'admin'));
@@ -1910,8 +1917,8 @@ const ApiService = {
       processed.push({ productId: product.productId, newStock: newStock, qty: qty });
     });
 
-    localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-    localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+    safeStorageSet(CONFIG.STORAGE_KEYS.PRODUCTS, products);
+    safeStorageSet(CONFIG.STORAGE_KEYS.TRANSACTIONS, transactions, 50);
 
     return {
       success: true,
@@ -2002,8 +2009,8 @@ const ApiService = {
       }
 
       transactions.splice(txIndex, 1);
-      localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
-      localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+      safeStorageSet(CONFIG.STORAGE_KEYS.TRANSACTIONS, transactions, 50);
+      safeStorageSet(CONFIG.STORAGE_KEYS.PRODUCTS, products);
 
       return {
         success: true,
@@ -2083,8 +2090,8 @@ const ApiService = {
     };
 
     transactions[txIndex] = updated;
-    localStorage.setItem(CONFIG.STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
-    localStorage.setItem(CONFIG.STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    safeStorageSet(CONFIG.STORAGE_KEYS.TRANSACTIONS, transactions, 50);
+    safeStorageSet(CONFIG.STORAGE_KEYS.PRODUCTS, products);
 
     return {
       success: true,
