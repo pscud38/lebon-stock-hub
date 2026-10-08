@@ -299,6 +299,63 @@ function isOnlineMode() {
   return isSupabaseConfigured();
 }
 
+/**
+ * Safe LocalStorage setter with QuotaExceededError protection,
+ * automatic LRU pruning of old transactions, and Base64 stripping to save memory.
+ */
+function safeStorageSet(key, value, maxItems = null) {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    let dataToStore = value;
+    if (maxItems && Array.isArray(value)) {
+      dataToStore = value.slice(0, maxItems);
+    }
+    // Strip large Base64 images from cached transactions to prevent 5MB quota exhaustion
+    if (key === (CONFIG?.STORAGE_KEYS?.TRANSACTIONS || 'stock_local_transactions') && Array.isArray(dataToStore)) {
+      dataToStore = dataToStore.map(t => {
+        if (t && t.imageUrl && typeof t.imageUrl === 'string' && t.imageUrl.startsWith('data:image')) {
+          return { ...t, imageUrl: '' };
+        }
+        return t;
+      });
+    }
+    const serialized = typeof dataToStore === 'string' ? dataToStore : JSON.stringify(dataToStore);
+    localStorage.setItem(key, serialized);
+    return true;
+  } catch (quotaErr) {
+    console.warn(`[SafeStorage] LocalStorage quota exceeded on "${key}". Performing automatic pruning...`, quotaErr);
+    try {
+      if (key === (CONFIG?.STORAGE_KEYS?.TRANSACTIONS || 'stock_local_transactions') && Array.isArray(value)) {
+        // Drastically prune to latest 30 records without images
+        const pruned = value.slice(0, 30).map(t => {
+          const item = { ...t };
+          if (item && item.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.startsWith('data:image')) {
+            item.imageUrl = '';
+          }
+          return item;
+        });
+        localStorage.setItem(key, JSON.stringify(pruned));
+        return true;
+      } else {
+        // Free up space by reducing transaction cache, then retry setting the requested key
+        const txKey = CONFIG?.STORAGE_KEYS?.TRANSACTIONS || 'stock_local_transactions';
+        const currentTxs = JSON.parse(localStorage.getItem(txKey) || '[]');
+        if (Array.isArray(currentTxs) && currentTxs.length > 20) {
+          localStorage.setItem(txKey, JSON.stringify(currentTxs.slice(0, 20)));
+        } else {
+          localStorage.removeItem(txKey);
+        }
+        const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+        localStorage.setItem(key, serialized);
+        return true;
+      }
+    } catch (fallbackErr) {
+      console.warn(`[SafeStorage] Could not persist key "${key}" even after pruning (non-fatal):`, fallbackErr);
+      return false; // Fail silently, NEVER break app flow!
+    }
+  }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     CONFIG,
@@ -306,6 +363,7 @@ if (typeof module !== 'undefined' && module.exports) {
     isSupabaseConfigured,
     getApiUrl,
     setApiUrl,
-    isOnlineMode
+    isOnlineMode,
+    safeStorageSet
   };
 }
