@@ -15,6 +15,7 @@ const App = {
   posSelectedCategory: 'all', // หมวดหมู่ที่เลือกในหน้ารับเข้า-เบิกจ่าย
   posSearchKeyword: '', // คำค้นหาในหน้ารับเข้า-เบิกจ่าย
   currentAttachedPhotoBase64: null, // เก็บรูปภาพ Base64 ที่ถ่าย/แนบมา
+  currentProductModalPhotoBase64: '', // รูปภาพสินค้าในโมดอลเพิ่ม/แก้ไขสินค้า
   deferredPrompt: null, // PWA Install prompt event
   batchRows: [], // รายการในโมดอลรับเข้าล็อตใหญ่
   batchReceiptBase64: null, // รูปใบเสร็จบิลรวม
@@ -518,14 +519,23 @@ const App = {
         <button onclick="App.confirmDeleteProduct('${p.productId}')" class="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-semibold transition shadow-2xs inline-flex items-center" title="ลบสินค้า"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
       ` : '';
 
+      const thumbHtml = p.imageUrl
+        ? `<img src="${p.imageUrl}" alt="${p.productName}" onclick="App.openProductImageModal('${p.productId}')" class="w-10 h-10 rounded-xl object-cover border border-indigo-200/80 shadow-2xs shrink-0 cursor-pointer hover:scale-105 transition" title="คลิกเพื่อดูรูปสินค้าขนาดใหญ่">`
+        : `<div class="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200/70 flex items-center justify-center text-slate-400 shrink-0"><i data-lucide="package" class="w-4 h-4"></i></div>`;
+
       return `
         <tr data-product-id="${p.productId}" class="border-b border-slate-100 hover:bg-indigo-50/30 transition text-sm">
           <td class="px-4 py-3.5 font-mono text-xs text-indigo-900 font-bold bg-slate-50/50 rounded-l-xl">${p.productId}</td>
           <td class="px-4 py-3.5">
-            <div class="font-bold text-slate-800">${p.productName}</div>
-            <div class="flex items-center gap-1.5 flex-wrap mt-0.5">
-              <span class="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600">${p.category}</span>
-              ${p.note ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-normal bg-indigo-50 text-indigo-700 border border-indigo-100/60" title="หมายเหตุ: ${p.note}"><i data-lucide="file-text" class="w-3 h-3"></i> ${p.note}</span>` : ''}
+            <div class="flex items-center gap-3">
+              ${thumbHtml}
+              <div class="min-w-0">
+                <div class="font-bold text-slate-800">${p.productName}</div>
+                <div class="flex items-center gap-1.5 flex-wrap mt-0.5">
+                  <span class="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600">${p.category}</span>
+                  ${p.note ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-normal bg-indigo-50 text-indigo-700 border border-indigo-100/60" title="หมายเหตุ: ${p.note}"><i data-lucide="file-text" class="w-3 h-3"></i> ${p.note}</span>` : ''}
+                </div>
+              </div>
             </div>
           </td>
           ${adminCols}
@@ -615,10 +625,23 @@ const App = {
 
     if (img) img.src = imageUrl;
     if (titleEl) titleEl.innerHTML = `<span>📸</span> รูปถ่าย: ${title}`;
-    if (subEl) subEl.textContent = subtitle ? `บันทึกเมื่อ: ${subtitle}` : '';
+    if (subEl) subEl.textContent = subtitle ? `รายละเอียด: ${subtitle}` : '';
     if (linkEl) linkEl.href = imageUrl;
 
     modal?.classList.remove('hidden');
+  },
+
+  openProductImageModal(productId) {
+    const p = (this.products || []).find(item => item.productId === productId);
+    if (!p || !p.imageUrl) return;
+    this.openImageViewerModal(p.imageUrl, `[${p.productId}] ${p.productName}`, `หมวดหมู่: ${p.category || '-'} | ราคาขาย ฿${(p.salePrice || 0).toLocaleString()}`);
+  },
+
+  openPosSelectedProductImage() {
+    const productId = document.getElementById('pos-product-select')?.value;
+    if (productId) {
+      this.openProductImageModal(productId);
+    }
   },
 
   closeImageViewerModal() {
@@ -1427,19 +1450,26 @@ const App = {
         ? `<span class="text-slate-400 text-[11px]">(ทุน ฿${Number(p.costPrice).toLocaleString()})</span>`
         : '';
 
+      const thumbHtml = p.imageUrl
+        ? `<img src="${p.imageUrl}" alt="${p.productName}" class="w-9 h-9 rounded-lg object-cover border border-indigo-200/80 shrink-0 shadow-2xs">`
+        : `<div class="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200/70 flex items-center justify-center text-slate-400 shrink-0"><i data-lucide="package" class="w-4 h-4"></i></div>`;
+
       return `
         <div onclick="App.selectPosProduct('${p.productId}')"
           class="p-2.5 hover:bg-indigo-50/70 cursor-pointer flex items-center justify-between transition group border-b border-slate-100 last:border-0">
-          <div class="flex-1 min-w-0 pr-2">
-            <div class="flex items-center gap-1.5">
-              <span class="font-mono text-xs font-bold text-indigo-600 group-hover:text-indigo-800">${p.productId}</span>
-              <span class="font-medium text-xs text-slate-800 truncate group-hover:text-indigo-950">${p.productName}</span>
-              ${stockBadge}
-            </div>
-            <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-              <span class="px-1.5 py-0.2 bg-slate-100 rounded text-slate-600 font-medium">${p.category || 'ทั่วไป'}</span>
-              <span>ราคาขาย <b class="text-slate-700">฿${Number(p.salePrice || 0).toLocaleString()}</b></span>
-              ${costBadge}
+          <div class="flex items-center gap-2.5 flex-1 min-w-0 pr-2">
+            ${thumbHtml}
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5">
+                <span class="font-mono text-xs font-bold text-indigo-600 group-hover:text-indigo-800">${p.productId}</span>
+                <span class="font-medium text-xs text-slate-800 truncate group-hover:text-indigo-950">${p.productName}</span>
+                ${stockBadge}
+              </div>
+              <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                <span class="px-1.5 py-0.2 bg-slate-100 rounded text-slate-600 font-medium">${p.category || 'ทั่วไป'}</span>
+                <span>ราคาขาย <b class="text-slate-700">฿${Number(p.salePrice || 0).toLocaleString()}</b></span>
+                ${costBadge}
+              </div>
             </div>
           </div>
           <div class="text-right whitespace-nowrap">
@@ -1484,6 +1514,17 @@ const App = {
     document.getElementById('pos-info-stock').textContent = `${product.currentStock} ${product.unit}`;
     document.getElementById('pos-info-cost').textContent = `฿${(product.costPrice || 0).toLocaleString()}`;
     document.getElementById('pos-info-sale').textContent = `฿${(product.salePrice || 0).toLocaleString()}`;
+
+    const infoImg = document.getElementById('pos-info-img');
+    if (infoImg) {
+      if (product.imageUrl) {
+        infoImg.src = product.imageUrl;
+        infoImg.classList.remove('hidden');
+      } else {
+        infoImg.src = '';
+        infoImg.classList.add('hidden');
+      }
+    }
 
     // ใส่ราคาตามประเภทรายการอัตโนมัติ (แต่ผู้ใช้แก้ได้)
     const type = document.getElementById('pos-type-select')?.value || 'OUT';
@@ -1776,6 +1817,14 @@ const App = {
       await this.saveProductFromModal();
     });
 
+    ['modal-product-photo-input', 'modal-product-camera-input'].forEach(inputId => {
+      document.getElementById(inputId)?.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        await this.handleProductModalPhotoSelect(file);
+      });
+    });
+
     const transTypeSelect = document.getElementById('modal-trans-type');
     const transQtyInput = document.getElementById('modal-trans-quantity');
     const transSaleInput = document.getElementById('modal-trans-saleprice');
@@ -1793,6 +1842,49 @@ const App = {
     if (transCostInput) {
       transCostInput.addEventListener('input', () => this.updateEditTransactionPreview());
     }
+  },
+
+  async handleProductModalPhotoSelect(file) {
+    try {
+      this.showLoading(true);
+      const base64 = await this.compressImage(file, 600, 0.72);
+      this.currentProductModalPhotoBase64 = base64;
+
+      const previewImg = document.getElementById('modal-product-photo-preview-img');
+      const previewContainer = document.getElementById('modal-product-photo-preview-container');
+      const btnRemove = document.getElementById('btn-remove-product-photo');
+
+      if (previewImg) previewImg.src = base64;
+      previewContainer?.classList.remove('hidden');
+      btnRemove?.classList.remove('hidden');
+      this.showToast('แนบรูปภาพสินค้าเรียบร้อยแล้ว', 'success');
+    } catch (err) {
+      this.showToast('ไม่สามารถประมวลผลรูปภาพสินค้าได้', 'error');
+    } finally {
+      this.showLoading(false);
+    }
+  },
+
+  clearProductModalPhoto() {
+    this.currentProductModalPhotoBase64 = '';
+    const photoInput = document.getElementById('modal-product-photo-input');
+    const cameraInput = document.getElementById('modal-product-camera-input');
+    const previewImg = document.getElementById('modal-product-photo-preview-img');
+    const previewContainer = document.getElementById('modal-product-photo-preview-container');
+    const btnRemove = document.getElementById('btn-remove-product-photo');
+
+    if (photoInput) photoInput.value = '';
+    if (cameraInput) cameraInput.value = '';
+    if (previewImg) previewImg.src = '';
+    previewContainer?.classList.add('hidden');
+    btnRemove?.classList.add('hidden');
+  },
+
+  previewCurrentProductModalPhoto() {
+    if (!this.currentProductModalPhotoBase64) return;
+    const pName = document.getElementById('modal-product-name')?.value?.trim() || 'สินค้าใหม่';
+    const pId = document.getElementById('modal-product-id')?.value?.trim() || '';
+    this.openImageViewerModal(this.currentProductModalPhotoBase64, `${pId ? '[' + pId + '] ' : ''}${pName}`, 'ตัวอย่างรูปภาพสินค้า');
   },
 
   setProductModalNote(noteText) {
@@ -1822,6 +1914,8 @@ const App = {
     
     const noteInput = document.getElementById('modal-product-note');
     if (noteInput) noteInput.value = '';
+
+    this.clearProductModalPhoto();
 
     const alertToggle = document.getElementById('modal-product-alert-toggle');
     if (alertToggle) alertToggle.checked = true;
@@ -1855,6 +1949,17 @@ const App = {
 
     const noteInput = document.getElementById('modal-product-note');
     if (noteInput) noteInput.value = product.note || '';
+
+    this.clearProductModalPhoto();
+    if (product.imageUrl) {
+      this.currentProductModalPhotoBase64 = product.imageUrl;
+      const previewImg = document.getElementById('modal-product-photo-preview-img');
+      const previewContainer = document.getElementById('modal-product-photo-preview-container');
+      const btnRemove = document.getElementById('btn-remove-product-photo');
+      if (previewImg) previewImg.src = product.imageUrl;
+      previewContainer?.classList.remove('hidden');
+      btnRemove?.classList.remove('hidden');
+    }
 
     const isAlertDisabled = (product.minAlert === -1 || product.minAlert === '-1' || product.isAlertEnabled === false);
     const alertToggle = document.getElementById('modal-product-alert-toggle');
@@ -1892,6 +1997,7 @@ const App = {
     const salePrice = Number(document.getElementById('modal-product-sale').value) || 0;
     const initialStock = Number(document.getElementById('modal-product-stock').value) || 0;
     const note = document.getElementById('modal-product-note')?.value?.trim() || '';
+    const imageUrl = this.currentProductModalPhotoBase64 || '';
 
     const isAlertEnabled = document.getElementById('modal-product-alert-toggle')?.checked !== false;
     let minAlert = 5;
@@ -1942,6 +2048,7 @@ const App = {
         initialStock,
         minAlert,
         note,
+        imageUrl,
         isEdit,
         updateStock: !isEdit || isStockChanged
       });
@@ -1959,7 +2066,8 @@ const App = {
         currentStock: (!isEdit || isStockChanged) ? initialStock : (existingProduct ? existingProduct.currentStock : initialStock),
         minAlert,
         isAlertEnabled: minAlert !== -1,
-        note: note
+        note: note,
+        imageUrl: imageUrl
       };
       if (window.appStore) {
         const idx = window.appStore.state.products.findIndex(p => p.productId === productId);
@@ -2711,7 +2819,7 @@ const App = {
           };
           await ApiService.saveProduct(newProduct);
           this.products.push(newProduct);
-          if (window.appStore && window.appStore.state && window.appStore.state.products) {
+          if (window.appStore && window.appStore.state && window.appStore.state.products && window.appStore.state.products !== this.products) {
             window.appStore.state.products.push(newProduct);
           }
           r.productId = newId;
@@ -3162,7 +3270,7 @@ const App = {
         };
         await ApiService.saveProduct(newProduct);
         this.products.push(newProduct);
-        if (window.appStore && window.appStore.state && window.appStore.state.products) {
+        if (window.appStore && window.appStore.state && window.appStore.state.products && window.appStore.state.products !== this.products) {
           window.appStore.state.products.push(newProduct);
         }
         targetProduct = newProduct;

@@ -16,12 +16,27 @@ if (typeof globalThis.CONFIG === 'undefined' && typeof require !== 'undefined') 
     if (typeof globalThis.isSupabaseConfigured === 'undefined') {
       globalThis.isSupabaseConfigured = _cfg.isSupabaseConfigured;
     }
+    if (typeof globalThis.safeStorageSet === 'undefined' && _cfg.safeStorageSet) {
+      globalThis.safeStorageSet = _cfg.safeStorageSet;
+    }
   } catch (e) {
     // Non-fatal: running in browser or bundler environment without Node.js filesystem require
     if (typeof console !== 'undefined' && console.debug) {
       console.debug('CJS environment bootstrap skipped in browser mode:', e?.message);
     }
   }
+}
+
+if (typeof safeStorageSet === 'undefined' && typeof globalThis !== 'undefined' && typeof globalThis.safeStorageSet === 'undefined') {
+  globalThis.safeStorageSet = function(key, value) {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+      localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
 }
 
 /**
@@ -192,7 +207,7 @@ const ApiService = {
 
         const [prodRes, transRes, catRes, userRes] = await Promise.all([
           fetch(`${url}/rest/v1/products?select=*&order=product_id.asc`, { headers, cache: 'no-store' }),
-          fetch(`${url}/rest/v1/transactions?select=*&order=timestamp.desc&limit=150`, { headers, cache: 'no-store' }),
+          fetch(`${url}/rest/v1/transactions?select=*&order=timestamp.desc&limit=1000`, { headers, cache: 'no-store' }),
           fetch(`${url}/rest/v1/categories?select=*&order=name.asc`, { headers, cache: 'no-store' }),
           fetch(`${url}/rest/v1/safe_users?select=*&order=username.asc`, { headers, cache: 'no-store' })
             .then(r => r.ok ? r : fetch(`${url}/rest/v1/users?select=username,full_name,role,status,created_at&order=username.asc`, { headers, cache: 'no-store' }))
@@ -874,8 +889,12 @@ const ApiService = {
           last_updated: new Date().toISOString()
         };
 
-        if (productData.note) {
+        if (productData.note !== undefined) {
           payload.note = productData.note;
+        }
+
+        if (productData.imageUrl !== undefined) {
+          payload.image_url = productData.imageUrl;
         }
 
         if (productData.updateStock || productData.initialStock !== undefined) {
@@ -889,10 +908,18 @@ const ApiService = {
         });
 
         if (!res.ok) {
-          const errTxt = await res.text();
-          // ถ้าตาราง products ยังไม่มีคอลัมน์ note ให้ตัดออกแล้วลองใหม่ ป้องกัน Error 42703
+          const errTxt = typeof res.text === 'function' ? await res.text() : '';
+          let retried = false;
+          // ถ้าตาราง products ยังไม่มีคอลัมน์ note หรือ image_url ให้ตัดออกแล้วลองใหม่ ป้องกัน Error 42703
           if (errTxt.includes('note') && (errTxt.includes('does not exist') || errTxt.includes('42703'))) {
             delete payload.note;
+            retried = true;
+          }
+          if (errTxt.includes('image_url') && (errTxt.includes('does not exist') || errTxt.includes('42703'))) {
+            delete payload.image_url;
+            retried = true;
+          }
+          if (retried) {
             res = await fetch(`${url}/rest/v1/products`, {
               method: 'POST',
               headers: headers,
@@ -900,7 +927,8 @@ const ApiService = {
             });
           }
           if (!res.ok) {
-            throw new Error('Supabase saveProduct failed: ' + (await res.text()));
+            const finalErrTxt = typeof res.text === 'function' ? await res.text() : errTxt;
+            throw new Error('Supabase saveProduct failed: ' + finalErrTxt);
           }
         }
 
@@ -922,7 +950,7 @@ const ApiService = {
               profit: 0,
               operator: (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUser()?.fullName) || 'Admin',
               note: productData.note ? `[สต็อกเริ่มต้น] ${productData.note}` : 'เพิ่มสินค้าใหม่พร้อมสต็อกเริ่มต้น',
-              image_url: ''
+              image_url: productData.imageUrl || ''
             };
             await fetch(`${url}/rest/v1/transactions`, {
               method: 'POST',
@@ -1967,6 +1995,7 @@ const ApiService = {
         marginPercent: margin,
         minAlert: parseMinAlert(data.minAlert),
         note: data.note !== undefined ? data.note : (products[index].note || ''),
+        imageUrl: data.imageUrl !== undefined ? data.imageUrl : (products[index].imageUrl || ''),
         currentStock: data.updateStock ? Number(data.initialStock) : products[index].currentStock,
         lastUpdated: new Date().toISOString()
       };
@@ -1983,6 +2012,7 @@ const ApiService = {
         currentStock: Number(data.initialStock) || 0,
         minAlert: parseMinAlert(data.minAlert),
         note: data.note || '',
+        imageUrl: data.imageUrl || '',
         lastUpdated: new Date().toISOString()
       };
       products.push(newProd);

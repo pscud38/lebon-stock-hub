@@ -553,12 +553,15 @@
 
             <!-- Selected Product Info Card -->
             <div id="pos-product-info-card" class="hidden p-4 bg-gradient-to-r from-indigo-50/90 to-violet-50/80 border border-indigo-200/80 rounded-2xl space-y-2.5">
-              <div class="flex justify-between items-start">
-                <div>
-                  <span id="pos-info-name" class="font-extrabold text-indigo-950 text-base block">ชื่อสินค้า</span>
-                  <span class="text-xs text-indigo-700 font-medium">สต็อกคงเหลือในคลัง: <b id="pos-info-stock" class="text-indigo-950 font-extrabold text-sm">0 ชิ้น</b></span>
+              <div class="flex justify-between items-start gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                  <img id="pos-info-img" src="" alt="Product" onclick="App.openPosSelectedProductImage()" class="hidden w-12 h-12 rounded-xl object-cover border border-indigo-200 shadow-xs shrink-0 cursor-pointer hover:scale-105 transition" title="คลิกเพื่อดูรูปสินค้าขนาดใหญ่">
+                  <div class="min-w-0">
+                    <span id="pos-info-name" class="font-extrabold text-indigo-950 text-base block truncate">ชื่อสินค้า</span>
+                    <span class="text-xs text-indigo-700 font-medium">สต็อกคงเหลือในคลัง: <b id="pos-info-stock" class="text-indigo-950 font-extrabold text-sm">0 ชิ้น</b></span>
+                  </div>
                 </div>
-                <button type="button" id="pos-btn-change-product" class="px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1 active:scale-95">
+                <button type="button" id="pos-btn-change-product" class="shrink-0 px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1 active:scale-95">
                   <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> เปลี่ยนสินค้า
                 </button>
               </div>
@@ -1621,6 +1624,42 @@
             class="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none">
         </div>
 
+        <!-- Product Image Upload & Preview -->
+        <div class="pt-3 border-t border-slate-100 space-y-2">
+          <label class="block font-bold text-slate-700 flex items-center justify-between">
+            <span class="flex items-center gap-1.5">
+              <i data-lucide="image" class="w-4 h-4 text-indigo-600"></i> รูปภาพสินค้า (ถ้ามี)
+            </span>
+            <span class="text-[10px] text-slate-400 font-normal">ย่อขนาดอัตโนมัติ &amp; ซิงค์ขึ้น Cloud</span>
+          </label>
+
+          <input type="file" id="modal-product-photo-input" accept="image/*" class="hidden">
+          <input type="file" id="modal-product-camera-input" accept="image/*" capture="environment" class="hidden">
+
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="document.getElementById('modal-product-photo-input').click()"
+              class="flex-1 py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border border-indigo-200/80 active:scale-95">
+              <i data-lucide="image-plus" class="w-4 h-4"></i> เลือกรูปสินค้า
+            </button>
+            <button type="button" onclick="document.getElementById('modal-product-camera-input').click()"
+              class="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border border-slate-200 active:scale-95">
+              <i data-lucide="camera" class="w-4 h-4"></i> ถ่ายรูป
+            </button>
+            <button type="button" id="btn-remove-product-photo" onclick="App.clearProductModalPhoto()"
+              class="hidden py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition flex items-center gap-1 border border-rose-200/60">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> ลบรูป
+            </button>
+          </div>
+
+          <div id="modal-product-photo-preview-container" class="hidden p-2.5 rounded-2xl border border-indigo-200 bg-slate-50/80 flex items-center gap-3">
+            <img id="modal-product-photo-preview-img" src="" alt="Product Preview" onclick="App.previewCurrentProductModalPhoto()" class="w-16 h-16 object-cover rounded-xl shadow-xs border border-white shrink-0 cursor-pointer hover:scale-105 transition" title="คลิกเพื่อดูรูปขนาดใหญ่">
+            <div class="text-[11px] text-slate-600 min-w-0">
+              <div class="font-bold text-indigo-900">แนบรูปภาพสินค้าแล้ว ✅</div>
+              <div class="text-slate-400 text-[10px]">รูปนี้จะแสดงในตารางคลังสินค้าและหน้าขาย POS (คลิกที่รูปเพื่อขยาย)</div>
+            </div>
+          </div>
+        </div>
+
         <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
           <button type="button" onclick="App.closeProductModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition">ยกเลิก</button>
           <button type="submit" id="btn-save-product" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition flex items-center gap-1.5 active:scale-95">
@@ -1934,14 +1973,14 @@
   </div>
 
   <!-- Application Scripts with Version Cache-Busting -->
-  <script src="config.js?v=4.0.8"></script>
-  <script src="auth.js?v=4.0.8"></script>
-  <script src="api.js?v=4.0.8"></script>
-  <script src="store.js?v=4.0.8"></script>
-  <script src="optimistic.js?v=4.0.8"></script>
-  <script src="scanner.js?v=4.0.8"></script>
-  <script src="reports.js?v=4.0.8"></script>
-  <script src="app.js?v=4.0.8"></script>
+  <script src="config.js?v=4.0.9"></script>
+  <script src="auth.js?v=4.0.9"></script>
+  <script src="api.js?v=4.0.9"></script>
+  <script src="store.js?v=4.0.9"></script>
+  <script src="optimistic.js?v=4.0.9"></script>
+  <script src="scanner.js?v=4.0.9"></script>
+  <script src="reports.js?v=4.0.9"></script>
+  <script src="app.js?v=4.0.9"></script>
 
   <!-- PWA Service Worker Registration & Auto-Update Lifecycle -->
   <script>
@@ -1949,7 +1988,7 @@
     if ('caches' in window) {
       caches.keys().then((keys) => {
         keys.forEach((key) => {
-          if (key !== 'lebon-stock-v4.0.8') {
+          if (key !== 'lebon-stock-v4.0.9') {
             console.log('[PWA] Purging outdated cache:', key);
             caches.delete(key);
           }

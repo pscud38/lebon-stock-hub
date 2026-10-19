@@ -306,6 +306,7 @@ function isOnlineMode() {
 function safeStorageSet(key, value, maxItems = null) {
   if (typeof localStorage === 'undefined') return false;
   const txKey = (typeof CONFIG !== 'undefined' && CONFIG?.STORAGE_KEYS?.TRANSACTIONS) ? CONFIG.STORAGE_KEYS.TRANSACTIONS : 'stock_local_transactions';
+  const prodKey = (typeof CONFIG !== 'undefined' && CONFIG?.STORAGE_KEYS?.PRODUCTS) ? CONFIG.STORAGE_KEYS.PRODUCTS : 'stock_local_products';
   try {
     let dataToStore = value;
     if (maxItems && Array.isArray(value)) {
@@ -320,14 +321,18 @@ function safeStorageSet(key, value, maxItems = null) {
         return t;
       });
     }
-    const serialized = typeof dataToStore === 'string' ? dataToStore : JSON.stringify(dataToStore);
+    let serialized = typeof dataToStore === 'string' ? dataToStore : JSON.stringify(dataToStore);
+    // If product cache exceeds 2MB due to Base64 thumbnails, store lightweight product metadata in localStorage
+    if (key === prodKey && Array.isArray(dataToStore) && serialized.length > 2000000) {
+      const lightProds = dataToStore.map(p => (p && typeof p.imageUrl === 'string' && p.imageUrl.startsWith('data:image')) ? { ...p, imageUrl: '' } : p);
+      serialized = JSON.stringify(lightProds);
+    }
     localStorage.setItem(key, serialized);
     return true;
   } catch (quotaErr) {
     console.warn(`[SafeStorage] LocalStorage quota exceeded on "${key}". Performing automatic pruning...`, quotaErr);
     try {
       if (key === txKey && Array.isArray(value)) {
-        // Drastically prune to latest 15 records without images
         const pruned = value.slice(0, 15).map(t => {
           const item = { ...t };
           if (item && item.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.startsWith('data:image')) {
@@ -343,10 +348,13 @@ function safeStorageSet(key, value, maxItems = null) {
           return false;
         }
       } else {
-        // Free up space by removing transactions cache, then retry setting the requested key
         localStorage.removeItem(txKey);
         try {
-          const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+          let fallbackData = value;
+          if (key === prodKey && Array.isArray(value)) {
+            fallbackData = value.map(p => (p && typeof p.imageUrl === 'string' && p.imageUrl.startsWith('data:image')) ? { ...p, imageUrl: '' } : p);
+          }
+          const serialized = typeof fallbackData === 'string' ? fallbackData : JSON.stringify(fallbackData);
           localStorage.setItem(key, serialized);
           return true;
         } catch (_) {
@@ -355,9 +363,13 @@ function safeStorageSet(key, value, maxItems = null) {
       }
     } catch (fallbackErr) {
       console.warn(`[SafeStorage] Could not persist key "${key}" (non-fatal, ignored):`, fallbackErr);
-      return false; // Fail silently, NEVER break app flow!
+      return false;
     }
   }
+}
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.safeStorageSet = safeStorageSet;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
