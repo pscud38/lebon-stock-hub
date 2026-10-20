@@ -239,12 +239,25 @@ function prependTransactionRowDOM(tx) {
     </td>
   ` : '';
 
-  const photoButton = tx.imageUrl ? `
-    <button onclick="App.openImageViewerModal('${tx.imageUrl}', '${tx.productName}', '${timeStr}')" 
-      class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition">
-      <i data-lucide="image" class="w-3.5 h-3.5"></i> ดูรูป
+  const safeTitle = (tx.productName || tx.productId || '').replace(/'/g, "\\'");
+  const resolvedPhotoUrl = tx.imageUrl || tx.productImageUrl || (typeof App !== 'undefined' && App.getProductImageUrl ? App.getProductImageUrl(tx.productId) : '');
+  const photoButton = resolvedPhotoUrl ? `
+    <button onclick="App.openImageViewerModal('${resolvedPhotoUrl}', '${safeTitle}', '${timeStr}')" 
+      class="inline-flex items-center gap-1.5 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 rounded-lg text-xs font-semibold transition cursor-pointer">
+      <img src="${resolvedPhotoUrl}" alt="" class="w-5 h-5 rounded object-cover border border-indigo-200">
+      <span>ดูรูป</span>
     </button>
   ` : '<span class="text-slate-300 text-xs">-</span>';
+
+  const productThumbHtml = (typeof App !== 'undefined' && App.renderProductThumb)
+    ? App.renderProductThumb({ productId: tx.productId, productName: tx.productName, imageUrl: resolvedPhotoUrl }, {
+        sizeClass: 'w-9 h-9',
+        roundedClass: 'rounded-lg',
+        fallbackUrl: resolvedPhotoUrl,
+        subtitle: timeStr,
+        allowQuickEdit: false
+      })
+    : '';
 
   const tr = document.createElement('tr');
   tr.id = `tx-row-${tx.transId}`;
@@ -256,7 +269,15 @@ function prependTransactionRowDOM(tx) {
     </td>
     <td class="px-4 py-3 text-slate-500 whitespace-nowrap font-mono text-xs">${timeStr}</td>
     <td class="px-4 py-3">${typeBadge}</td>
-    <td class="px-4 py-3 font-medium text-slate-800">${tx.productName} <span class="text-xs text-slate-400 font-mono">(${tx.productId})</span></td>
+    <td class="px-4 py-3 font-medium text-slate-800">
+      <div class="flex items-center gap-2.5">
+        ${productThumbHtml}
+        <div>
+          <div class="font-semibold text-slate-800 leading-snug">${tx.productName}</div>
+          <div class="text-[11px] text-slate-400 font-mono">${tx.productId}</div>
+        </div>
+      </div>
+    </td>
     <td class="px-4 py-3 text-right font-semibold text-slate-700">${(tx.quantity || 0).toLocaleString()}</td>
     <td class="px-4 py-3 text-right font-medium text-slate-700">${tx.totalRevenue ? '฿' + Number(tx.totalRevenue).toLocaleString() : '-'}</td>
     ${profitCell}

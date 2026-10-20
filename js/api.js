@@ -192,6 +192,42 @@ function mapUserFromDb(row) {
   };
 }
 
+/**
+ * ซิงค์รูปภาพระหว่างสินค้า (products.imageUrl) และรายการธุรกรรม (transactions.imageUrl)
+ * เพื่อให้ทุกหน้าแสดงรูปสินค้าตรงกันเสมอ (Jarvis Image Sync Upgrade)
+ */
+function syncProductAndTransactionImages(products, transactions) {
+  if (!Array.isArray(products) || !Array.isArray(transactions)) return;
+
+  const latestTxImgByProduct = new Map();
+  transactions.forEach(t => {
+    if (t && t.productId && t.imageUrl && String(t.imageUrl).trim().length > 0) {
+      const pid = String(t.productId).trim();
+      if (!latestTxImgByProduct.has(pid)) {
+        latestTxImgByProduct.set(pid, t.imageUrl);
+      }
+    }
+  });
+
+  const prodImgById = new Map();
+  products.forEach(p => {
+    if (!p || !p.productId) return;
+    const pid = String(p.productId).trim();
+    if ((!p.imageUrl || !String(p.imageUrl).trim()) && latestTxImgByProduct.has(pid)) {
+      p.imageUrl = latestTxImgByProduct.get(pid);
+    }
+    if (p.imageUrl && String(p.imageUrl).trim().length > 0) {
+      prodImgById.set(pid, p.imageUrl);
+    }
+  });
+
+  transactions.forEach(t => {
+    if (!t || !t.productId) return;
+    const pid = String(t.productId).trim();
+    t.productImageUrl = prodImgById.get(pid) || t.imageUrl || '';
+  });
+}
+
 const ApiService = {
   /**
    * ดึงข้อมูลทั้งหมดสำหรับแดชบอร์ด (Supabase ~150ms -> Google Sheets -> LocalStorage)
@@ -221,6 +257,7 @@ const ApiService = {
 
           const products = prodData.map(mapProductFromDb);
           const transactions = transData.map(mapTransactionFromDb);
+          syncProductAndTransactionImages(products, transactions);
           const categories = catData.length > 0 ? catData.map(c => c.name) : CONFIG.DEFAULT_CATEGORIES;
           const users = userData.length > 0 ? userData.map(mapUserFromDb) : [
             { username: 'admin', fullName: 'ผู้ดูแลระบบ (Admin)', role: 'admin', status: 'active' },
@@ -423,6 +460,18 @@ const ApiService = {
               const transId = rpcJson.transId;
               const profit = Number(rpcJson.profit) || 0;
 
+              // ซิงค์รูปถ่ายจากรายการธุรกรรมเข้าสู่ข้อมูลหลักของสินค้าอัตโนมัติ (Jarvis Auto-Sync)
+              if (imageUrl && String(imageUrl).trim().length > 0) {
+                fetch(`${url}/rest/v1/products?product_id=eq.${encodeURIComponent(productId)}`, {
+                  method: 'PATCH',
+                  headers: headers,
+                  body: JSON.stringify({
+                    image_url: imageUrl,
+                    last_updated: new Date().toISOString()
+                  })
+                }).catch(() => {});
+              }
+
               // อัปเดต LocalStorage แคชคู่ขนาน (Safe non-blocking)
               try {
                 this.addLocalTransaction({ role, ...transactionData, transId, newStock });
@@ -521,7 +570,7 @@ const ApiService = {
         const profitPerUnit = Number((dbSalePrice - newWac).toFixed(2));
         const marginPercent = dbSalePrice > 0 ? Number(((profitPerUnit / dbSalePrice) * 100).toFixed(2)) : 0;
 
-        // อัปเดตสินค้า (Stock, WAC, Profit)
+        // อัปเดตสินค้า (Stock, WAC, Profit, Image Auto-Sync)
         const updateProductPayload = {
           current_stock: newStock,
           cost_price: newWac,
@@ -529,6 +578,9 @@ const ApiService = {
           margin_percent: marginPercent,
           last_updated: nowIso
         };
+        if (imageUrl && String(imageUrl).trim().length > 0) {
+          updateProductPayload.image_url = imageUrl;
+        }
 
         const patchPromise = fetch(`${url}/rest/v1/products?product_id=eq.${encodeURIComponent(productId)}`, {
           method: 'PATCH',
@@ -1687,6 +1739,8 @@ const ApiService = {
       safeStorageSet(CONFIG.STORAGE_KEYS.CATEGORIES, categories);
     }
 
+    syncProductAndTransactionImages(products, transactions);
+
     const summary = this.calculateSummaryMetrics(products, transactions);
 
     const fullData = {
@@ -1834,6 +1888,11 @@ const ApiService = {
     const rand4 = Math.floor(1000 + Math.random() * 9000);
     const transId = 'TRX-' + Date.now() + '-' + rand4;
     const imageUrl = data.imageUrl || data.imageBase64 || '';
+
+    if (imageUrl && String(imageUrl).trim().length > 0) {
+      product.imageUrl = imageUrl;
+      products[productIndex] = product;
+    }
 
     const newTrans = {
       transId: transId,

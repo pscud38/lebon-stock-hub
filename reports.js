@@ -417,12 +417,20 @@ const ReportsManager = {
     tbody.innerHTML = list.map((item, idx) => {
       const margin = item.revenue > 0 ? ((item.profit / item.revenue) * 100).toFixed(1) : '0.0';
       const profitClass = item.profit >= 0 ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-semibold';
+      const thumbHtml = (typeof App !== 'undefined' && App.renderProductThumb)
+        ? App.renderProductThumb({ productId: item.productId, productName: item.productName }, { sizeClass: 'w-9 h-9', roundedClass: 'rounded-lg', allowQuickEdit: false })
+        : '';
       return `
         <tr class="border-b border-slate-100 hover:bg-slate-50 transition">
           <td class="px-4 py-3 text-center text-slate-400 text-xs">${idx + 1}</td>
           <td class="px-4 py-3">
-            <div class="font-medium text-slate-800">${item.productName}</div>
-            <div class="text-xs text-slate-400 font-mono">${item.productId}</div>
+            <div class="flex items-center gap-2.5">
+              ${thumbHtml}
+              <div>
+                <div class="font-medium text-slate-800">${item.productName}</div>
+                <div class="text-xs text-slate-400 font-mono">${item.productId}</div>
+              </div>
+            </div>
           </td>
           <td class="px-4 py-3 text-right font-medium text-slate-700">${item.qtySold.toLocaleString()}</td>
           <td class="px-4 py-3 text-right font-medium text-slate-700">฿${item.revenue.toLocaleString()}</td>
@@ -462,16 +470,26 @@ const ReportsManager = {
         ? `<span class="${t.profit >= 0 ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-semibold'}">฿${(t.profit || 0).toLocaleString()}</span>` 
         : '-';
 
+      const thumbHtml = (typeof App !== 'undefined' && App.renderProductThumb)
+        ? App.renderProductThumb({ productId: t.productId, productName: t.productName, imageUrl: t.imageUrl || t.productImageUrl }, { sizeClass: 'w-8 h-8', roundedClass: 'rounded-lg', fallbackUrl: t.imageUrl || t.productImageUrl, allowQuickEdit: false })
+        : '';
+
+      const safeTitle = (t.productName || t.productId || '').replace(/'/g, "\\'");
       const photoBtn = t.imageUrl ? `
-        <button onclick="App.openImageViewerModal('${t.imageUrl}', '${t.productName || t.productId}', '${timeStr}')" 
-          class="ml-1 text-indigo-600 hover:text-indigo-800 text-xs font-semibold" title="ดูรูปถ่าย">📸</button>
+        <button onclick="App.openImageViewerModal('${t.imageUrl}', '${safeTitle}', '${timeStr}')" 
+          class="ml-1 text-indigo-600 hover:text-indigo-800 text-xs font-semibold cursor-pointer" title="ดูรูปถ่าย">📸</button>
       ` : '';
 
       return `
         <tr class="border-b border-slate-100 hover:bg-slate-50 transition text-sm">
           <td class="px-4 py-2.5 text-slate-500 whitespace-nowrap">${timeStr}</td>
           <td class="px-4 py-2.5">${typeBadge}</td>
-          <td class="px-4 py-2.5 font-medium text-slate-800">${t.productName || t.productId} ${photoBtn}</td>
+          <td class="px-4 py-2.5 font-medium text-slate-800">
+            <div class="flex items-center gap-2">
+              ${thumbHtml}
+              <span>${t.productName || t.productId} ${photoBtn}</span>
+            </div>
+          </td>
           <td class="px-4 py-2.5 text-right font-medium text-slate-700">${t.quantity.toLocaleString()}</td>
           <td class="px-4 py-2.5 text-right text-slate-700">${t.totalRevenue ? '฿' + t.totalRevenue.toLocaleString() : '-'}</td>
           <td class="px-4 py-2.5 text-right">${profitDisplay}</td>

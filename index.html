@@ -572,7 +572,10 @@
             <div id="pos-product-info-card" class="hidden p-4 bg-gradient-to-r from-indigo-50/90 to-violet-50/80 border border-indigo-200/80 rounded-2xl space-y-2.5">
               <div class="flex justify-between items-start gap-3">
                 <div class="flex items-center gap-3 min-w-0">
-                  <img id="pos-info-img" src="" alt="Product" onclick="App.openPosSelectedProductImage()" class="hidden w-12 h-12 rounded-xl object-cover border border-indigo-200 shadow-xs shrink-0 cursor-pointer hover:scale-105 transition" title="คลิกเพื่อดูรูปสินค้าขนาดใหญ่">
+                  <div class="relative shrink-0">
+                    <img id="pos-info-img" src="" alt="Product" onclick="App.openPosSelectedProductImage()" class="hidden w-16 h-16 rounded-2xl object-cover border-2 border-indigo-200 shadow-sm shrink-0 cursor-pointer hover:scale-105 transition" title="คลิกเพื่อดูรูปสินค้าขนาดใหญ่">
+                    <div id="pos-info-img-fallback" class="hidden w-16 h-16 rounded-2xl bg-indigo-100/80 border border-indigo-200 flex items-center justify-center text-indigo-600 font-extrabold text-sm shrink-0">📦</div>
+                  </div>
                   <div class="min-w-0">
                     <span id="pos-info-name" class="font-extrabold text-indigo-950 text-base block truncate">ชื่อสินค้า</span>
                     <span class="text-xs text-indigo-700 font-medium">สต็อกคงเหลือในคลัง: <b id="pos-info-stock" class="text-indigo-950 font-extrabold text-sm">0 ชิ้น</b></span>
@@ -2021,14 +2024,14 @@
   </div>
 
   <!-- Application Scripts with Version Cache-Busting -->
-  <script src="config.js?v=4.1.0"></script>
-  <script src="auth.js?v=4.1.0"></script>
-  <script src="api.js?v=4.1.0"></script>
-  <script src="store.js?v=4.1.0"></script>
-  <script src="optimistic.js?v=4.1.0"></script>
-  <script src="scanner.js?v=4.1.0"></script>
-  <script src="reports.js?v=4.1.0"></script>
-  <script src="app.js?v=4.1.0"></script>
+  <script src="config.js?v=4.2.0"></script>
+  <script src="auth.js?v=4.2.0"></script>
+  <script src="api.js?v=4.2.0"></script>
+  <script src="store.js?v=4.2.0"></script>
+  <script src="optimistic.js?v=4.2.0"></script>
+  <script src="scanner.js?v=4.2.0"></script>
+  <script src="reports.js?v=4.2.0"></script>
+  <script src="app.js?v=4.2.0"></script>
 
   <!-- PWA Service Worker Registration & Auto-Update Lifecycle -->
   <script>
@@ -2036,7 +2039,7 @@
     if ('caches' in window) {
       caches.keys().then((keys) => {
         keys.forEach((key) => {
-          if (key !== 'lebon-stock-v4.1.0') {
+          if (key !== 'lebon-stock-v4.2.0') {
             console.log('[PWA] Purging outdated cache:', key);
             caches.delete(key);
           }

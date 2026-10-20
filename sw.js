@@ -8,7 +8,7 @@
  *   - Comprehensive Supabase & Auth API bypass (Network-Only)
  */
 
-const CACHE_NAME = 'lebon-stock-v4.1.0';
+const CACHE_NAME = 'lebon-stock-v4.2.0';
 
 const STATIC_ASSETS = [
   './',

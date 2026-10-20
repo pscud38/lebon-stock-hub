@@ -43,6 +43,9 @@ const OptimisticEngine = {
     // 1. ทำ Delta Mutation ใน RAM ทันที (0 ms)
     product.currentStock = currentStock - quantity;
     product.lastUpdated = new Date().toISOString();
+    if (imageBase64 && !product.imageUrl) {
+      product.imageUrl = imageBase64;
+    }
 
     const salePrice = (customPrice !== null && customPrice >= 0) ? customPrice : Number(product.salePrice || 0);
     const costPrice = Number(product.costPrice) || 0;
@@ -65,6 +68,8 @@ const OptimisticEngine = {
       profit,
       operator: operator || 'Staff',
       note: note || '',
+      imageUrl: imageBase64 || '',
+      productImageUrl: product.imageUrl || imageBase64 || '',
       isOptimistic: true
     };
 
@@ -185,6 +190,9 @@ const OptimisticEngine = {
     product.profitPerUnit = Number((product.salePrice - newWac).toFixed(2));
     product.marginPercent = product.salePrice > 0 ? Number(((product.profitPerUnit / product.salePrice) * 100).toFixed(2)) : 0;
     product.lastUpdated = new Date().toISOString();
+    if (imageBase64 && !product.imageUrl) {
+      product.imageUrl = imageBase64;
+    }
 
     const tempTransId = 'TEMP-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
     const optimisticTx = {
@@ -201,6 +209,8 @@ const OptimisticEngine = {
       profit: 0,
       operator: operator || 'Staff',
       note: note || '',
+      imageUrl: imageBase64 || '',
+      productImageUrl: product.imageUrl || imageBase64 || '',
       isOptimistic: true
     };
 
