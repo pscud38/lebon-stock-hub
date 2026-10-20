@@ -436,6 +436,29 @@ const App = {
         this.renderProducts();
       });
     }
+
+    // Global Keyboard Shortcut: Ctrl+K or Cmd+K focuses active search bar (Jarvis PC UX Upgrade)
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (this.activeTab === 'pos') {
+          const posSearch = document.getElementById('pos-search-input');
+          if (posSearch) {
+            posSearch.focus();
+            posSearch.select();
+          }
+        } else {
+          if (this.activeTab !== 'products') {
+            this.switchTab('products');
+          }
+          const prodSearch = document.getElementById('product-search-input');
+          if (prodSearch) {
+            prodSearch.focus();
+            prodSearch.select();
+          }
+        }
+      }
+    });
   },
 
   setCategoryFilter(cat) {
@@ -454,6 +477,7 @@ const App = {
 
   renderProducts() {
     const tbody = document.getElementById('products-table-tbody');
+    const mobileCards = document.getElementById('products-mobile-cards');
     if (!tbody) return;
 
     const isAdmin = AuthManager.isAdmin();
@@ -473,7 +497,7 @@ const App = {
       const allCats = ['ALL', ...this.categories];
       pillsContainer.innerHTML = allCats.map(c => `
         <button onclick="App.setCategoryFilter('${c}')" data-category="${c}"
-          class="cat-pill-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${this.selectedCategory === c ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+          class="cat-pill-btn whitespace-nowrap shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${this.selectedCategory === c ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
           ${c === 'ALL' ? '🏷️ ทั้งหมด' : c}
         </button>
       `).join('');
@@ -481,7 +505,81 @@ const App = {
 
     if (filtered.length === 0) {
       tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-slate-400">ไม่พบรายการสินค้าที่ตรงกับเงื่อนไข</td></tr>`;
+      if (mobileCards) {
+        mobileCards.innerHTML = `<div class="bg-white p-8 rounded-2xl border border-slate-200/80 text-center text-slate-400 text-xs">ไม่พบรายการสินค้าที่ตรงกับเงื่อนไข</div>`;
+      }
       return;
+    }
+
+    if (mobileCards) {
+      mobileCards.innerHTML = filtered.map(p => {
+        const isLow = this.isProductLowStock(p);
+        const costVal = Number(p.costPrice) || 0;
+        const saleVal = Number(p.salePrice) || 0;
+        const profit = saleVal - costVal;
+        const margin = saleVal > 0 ? ((profit / saleVal) * 100).toFixed(0) : '0';
+
+        const stockPill = isLow
+          ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold ${p.currentStock <= 0 ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}"><span class="w-1.5 h-1.5 rounded-full ${p.currentStock <= 0 ? 'bg-rose-500' : 'bg-amber-500'}"></span>${p.currentStock <= 0 ? 'หมด (0)' : `เหลือ ${p.currentStock} ${p.unit || 'ชิ้น'}`}</span>`
+          : `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>คงเหลือ ${p.currentStock} ${p.unit || 'ชิ้น'}</span>`;
+
+        const cardThumb = p.imageUrl
+          ? `<img src="${p.imageUrl}" alt="${p.productName}" onclick="App.openProductImageModal('${p.productId}')" class="w-16 h-16 rounded-2xl object-cover border border-indigo-200/80 shadow-xs shrink-0 cursor-pointer">`
+          : `<div class="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200/70 flex items-center justify-center text-slate-400 shrink-0"><i data-lucide="package" class="w-6 h-6"></i></div>`;
+
+        return `
+          <div data-product-id="${p.productId}" class="bg-white p-3.5 rounded-2xl shadow-xs border border-slate-200/80 space-y-3">
+            <div class="flex items-start gap-3">
+              ${cardThumb}
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-1.5">
+                  <span class="font-mono text-[11px] font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">${p.productId}</span>
+                  ${stockPill}
+                </div>
+                <div class="font-extrabold text-slate-900 text-sm mt-1 leading-snug truncate">${p.productName}</div>
+                <div class="flex items-center gap-1.5 flex-wrap mt-1">
+                  <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-600">${p.category || 'ทั่วไป'}</span>
+                  ${p.note ? `<span class="text-[10px] text-indigo-600 bg-indigo-50/70 px-1.5 py-0.5 rounded truncate max-w-[160px]">📝 ${p.note}</span>` : ''}
+                </div>
+              </div>
+            </div>
+
+            <div class="grid ${isAdmin ? 'grid-cols-3' : 'grid-cols-1'} gap-2 p-2.5 rounded-xl bg-slate-50/90 border border-slate-100 text-xs">
+              <div>
+                <span class="text-[10px] text-slate-400 block">ราคาขาย</span>
+                <span class="font-extrabold text-indigo-700 text-sm tabular-nums">฿${saleVal.toLocaleString()}</span>
+              </div>
+              ${isAdmin ? `
+                <div>
+                  <span class="text-[10px] text-slate-400 block">ต้นทุน (WAC)</span>
+                  <span class="font-bold text-slate-700 text-sm tabular-nums">฿${costVal.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span class="text-[10px] text-slate-400 block">กำไร/ชิ้น</span>
+                  <span class="font-extrabold ${profit >= 0 ? 'text-emerald-600' : 'text-rose-600'} text-sm tabular-nums">${profit >= 0 ? '+' : ''}฿${profit.toLocaleString()} <span class="text-[10px] font-medium">(${margin}%)</span></span>
+                </div>
+              ` : ''}
+            </div>
+
+            <div class="flex items-center gap-2 pt-0.5">
+              <button onclick="App.openQuickTransModal('${p.productId}', 'OUT')" class="flex-1 py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 active:scale-95">
+                <i data-lucide="arrow-up-right" class="w-4 h-4"></i> เบิกขาย
+              </button>
+              <button onclick="App.openQuickTransModal('${p.productId}', 'IN')" class="flex-1 py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 active:scale-95">
+                <i data-lucide="arrow-down-left" class="w-4 h-4"></i> รับเข้า
+              </button>
+              ${isAdmin ? `
+                <button onclick="App.openEditProductModal('${p.productId}')" class="p-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition active:scale-95" title="แก้ไขสินค้า">
+                  <i data-lucide="edit-3" class="w-4 h-4"></i>
+                </button>
+                <button onclick="App.confirmDeleteProduct('${p.productId}')" class="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-bold transition active:scale-95" title="ลบสินค้า">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
     tbody.innerHTML = filtered.map(p => {
@@ -500,7 +598,7 @@ const App = {
         ? `<div><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold ${p.currentStock <= 0 ? 'bg-rose-50 text-rose-700 border border-rose-200/60' : 'bg-amber-50 text-amber-800 border border-amber-200/60'}"><span class="w-1.5 h-1.5 rounded-full ${p.currentStock <= 0 ? 'bg-rose-500' : 'bg-amber-500'}"></span>${p.currentStock <= 0 ? 'หมดเกลี้ยง (0)' : `ใกล้หมด (${p.currentStock} ${p.unit})`}</span>${alertInfo}</div>`
         : `<div><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>${p.currentStock} ${p.unit}</span>${alertInfo}</div>`;
 
-      const profit = (p.salePrice || 0) - (p.costPrice || 0);
+      const profit = (Number(p.salePrice) || 0) - (Number(p.costPrice) || 0);
       const margin = p.salePrice > 0 ? ((profit / p.salePrice) * 100).toFixed(1) : '0.0';
       const profitBadge = profit >= 0 
         ? `<div class="text-emerald-600 font-semibold">+฿${profit.toLocaleString()} <span class="text-xs text-slate-400 font-normal">(${margin}%)</span></div>`
@@ -520,8 +618,8 @@ const App = {
       ` : '';
 
       const thumbHtml = p.imageUrl
-        ? `<img src="${p.imageUrl}" alt="${p.productName}" onclick="App.openProductImageModal('${p.productId}')" class="w-10 h-10 rounded-xl object-cover border border-indigo-200/80 shadow-2xs shrink-0 cursor-pointer hover:scale-105 transition" title="คลิกเพื่อดูรูปสินค้าขนาดใหญ่">`
-        : `<div class="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200/70 flex items-center justify-center text-slate-400 shrink-0"><i data-lucide="package" class="w-4 h-4"></i></div>`;
+        ? `<img src="${p.imageUrl}" alt="${p.productName}" onclick="App.openProductImageModal('${p.productId}')" class="w-12 h-12 rounded-xl object-cover border border-indigo-200/80 shadow-2xs shrink-0 cursor-pointer hover:scale-105 transition" title="คลิกเพื่อดูรูปสินค้าขนาดใหญ่">`
+        : `<div class="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200/70 flex items-center justify-center text-slate-400 shrink-0"><i data-lucide="package" class="w-5 h-5"></i></div>`;
 
       return `
         <tr data-product-id="${p.productId}" class="border-b border-slate-100 hover:bg-indigo-50/30 transition text-sm">
@@ -1379,8 +1477,35 @@ const App = {
       return `
         <button type="button" 
           onclick="App.setPosCategory('${cat}')" 
-          class="px-2.5 py-1 rounded-full whitespace-nowrap transition text-xs ${activeClass}">
+          class="px-2.5 py-1 rounded-full whitespace-nowrap shrink-0 transition text-xs ${activeClass}">
           ${label}
+        </button>
+      `;
+    }).join('');
+
+    this.renderPosQuickPicks();
+  },
+
+  renderPosQuickPicks() {
+    const quickContainer = document.getElementById('pos-quick-picks');
+    if (!quickContainer) return;
+
+    const stocked = (this.products || []).filter(p => (Number(p.currentStock) || 0) > 0).slice(0, 6);
+    if (stocked.length === 0) {
+      quickContainer.innerHTML = '';
+      return;
+    }
+
+    quickContainer.innerHTML = stocked.map(p => {
+      const miniThumb = p.imageUrl
+        ? `<img src="${p.imageUrl}" alt="" class="w-4 h-4 rounded object-cover shrink-0">`
+        : `<span class="text-[10px]">📦</span>`;
+      return `
+        <button type="button" onclick="App.selectPosProduct('${p.productId}')"
+          class="px-2.5 py-1 rounded-xl bg-amber-50/80 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-amber-200/70 hover:border-indigo-200 text-[11px] font-bold whitespace-nowrap shrink-0 flex items-center gap-1.5 transition active:scale-95">
+          ${miniThumb}
+          <span class="truncate max-w-[110px]">${p.productName}</span>
+          <span class="text-[10px] font-extrabold text-indigo-600">฿${Number(p.salePrice || 0).toLocaleString()}</span>
         </button>
       `;
     }).join('');
@@ -1560,17 +1685,74 @@ const App = {
 
   calculatePosLiveProfit() {
     const productId = document.getElementById('pos-product-select')?.value;
-    const type = document.getElementById('pos-type-select')?.value;
+    const type = document.getElementById('pos-type-select')?.value || 'OUT';
     const qty = Number(document.getElementById('pos-qty-input')?.value) || 0;
     const priceInputVal = document.getElementById('pos-unit-price-input')?.value;
     const hasCustomPrice = priceInputVal !== undefined && priceInputVal !== null && priceInputVal.trim() !== '' && !isNaN(Number(priceInputVal));
     const customPrice = hasCustomPrice ? Number(priceInputVal) : null;
     const liveProfitCard = document.getElementById('pos-live-profit-card');
+    const inlineBar = document.getElementById('pos-inline-total-bar');
+
+    const product = this.products.find(p => p.productId === productId);
+    if (!product || qty < 0 || (type !== 'ADJUST' && qty <= 0)) {
+      liveProfitCard?.classList.add('hidden');
+      inlineBar?.classList.add('hidden');
+      return;
+    }
+
+    const currentStock = Number(product.currentStock) || 0;
+    const costPerUnit = Number(product.costPrice) || 0;
+    const defaultSale = Number(product.salePrice) || 0;
+
+    // Update Inline Live Total & Stock Impact Bar (Visible for both Mobile & Desktop, Staff & Admin)
+    if (inlineBar) {
+      inlineBar.classList.remove('hidden');
+      const labelEl = document.getElementById('pos-inline-total-label');
+      const amountEl = document.getElementById('pos-inline-total-amount');
+      const profitBadgeEl = document.getElementById('pos-inline-profit-badge');
+      const stockAfterEl = document.getElementById('pos-inline-stock-after');
+
+      if (type === 'OUT') {
+        const unitSale = (customPrice !== null && customPrice >= 0) ? customPrice : defaultSale;
+        const totalRev = qty * unitSale;
+        const totalProfit = totalRev - (qty * costPerUnit);
+        const afterStock = currentStock - qty;
+        if (labelEl) labelEl.textContent = `📤 ยอดขายสุทธิ (${qty} ${product.unit || 'ชิ้น'} × ฿${unitSale.toLocaleString()})`;
+        if (amountEl) amountEl.textContent = `฿${totalRev.toLocaleString()}`;
+        if (profitBadgeEl) {
+          profitBadgeEl.textContent = `กำไร ${totalProfit >= 0 ? '+' : ''}฿${totalProfit.toLocaleString()}`;
+          profitBadgeEl.classList.remove('hidden');
+        }
+        if (stockAfterEl) {
+          stockAfterEl.textContent = `${afterStock} ${product.unit || 'ชิ้น'}`;
+          stockAfterEl.className = afterStock < 0 ? 'text-sm font-extrabold text-rose-400 tabular-nums' : 'text-sm font-extrabold text-amber-300 tabular-nums';
+        }
+      } else if (type === 'IN') {
+        const unitCost = (customPrice !== null && customPrice >= 0) ? customPrice : costPerUnit;
+        const totalInCost = qty * unitCost;
+        const afterStock = currentStock + qty;
+        if (labelEl) labelEl.textContent = `📥 ต้นทุนรับเข้ารวม (${qty} ${product.unit || 'ชิ้น'} × ฿${unitCost.toLocaleString()})`;
+        if (amountEl) amountEl.textContent = `฿${totalInCost.toLocaleString()}`;
+        if (profitBadgeEl) profitBadgeEl.classList.add('hidden');
+        if (stockAfterEl) {
+          stockAfterEl.textContent = `${afterStock} ${product.unit || 'ชิ้น'}`;
+          stockAfterEl.className = 'text-sm font-extrabold text-emerald-300 tabular-nums';
+        }
+      } else {
+        const diff = qty - currentStock;
+        if (labelEl) labelEl.textContent = `⚙️ ปรับยอดสต็อก (${diff >= 0 ? '+' : ''}${diff} ${product.unit || 'ชิ้น'})`;
+        if (amountEl) amountEl.textContent = `${qty} ${product.unit || 'ชิ้น'}`;
+        if (profitBadgeEl) profitBadgeEl.classList.add('hidden');
+        if (stockAfterEl) {
+          stockAfterEl.textContent = `${qty} ${product.unit || 'ชิ้น'}`;
+          stockAfterEl.className = 'text-sm font-extrabold text-indigo-300 tabular-nums';
+        }
+      }
+    }
 
     if (!liveProfitCard || !AuthManager.isAdmin()) return;
 
-    const product = this.products.find(p => p.productId === productId);
-    if (!product || qty <= 0 || type !== 'OUT') {
+    if (type !== 'OUT' || qty <= 0) {
       liveProfitCard.classList.add('hidden');
       return;
     }
@@ -1578,9 +1760,9 @@ const App = {
     liveProfitCard.classList.remove('hidden');
     
     // ใช้ราคาขายจริงที่กรอกในฟอร์ม (รองรับราคา 0 บาท สำหรับของตัวโชว์/ชำรุด)
-    const actualSalePrice = (customPrice !== null && customPrice >= 0) ? customPrice : (product.salePrice || 0);
+    const actualSalePrice = (customPrice !== null && customPrice >= 0) ? customPrice : defaultSale;
     const revenue = qty * actualSalePrice;
-    const cost = qty * (product.costPrice || 0);
+    const cost = qty * costPerUnit;
     const profit = revenue - cost;
     const margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
 
@@ -1588,7 +1770,7 @@ const App = {
     document.getElementById('pos-live-cost').textContent = `฿${cost.toLocaleString()}`;
     const elProfit = document.getElementById('pos-live-profit');
     elProfit.textContent = `${profit >= 0 ? '+' : ''}฿${profit.toLocaleString()} (${margin}%)`;
-    elProfit.className = profit >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
+    elProfit.className = 'text-3xl sm:text-4xl font-extrabold text-white tabular-nums tracking-tight';
   },
 
   async submitPosTransaction() {
@@ -1852,10 +2034,12 @@ const App = {
 
       const previewImg = document.getElementById('modal-product-photo-preview-img');
       const previewContainer = document.getElementById('modal-product-photo-preview-container');
+      const emptyBox = document.getElementById('modal-product-photo-empty');
       const btnRemove = document.getElementById('btn-remove-product-photo');
 
       if (previewImg) previewImg.src = base64;
       previewContainer?.classList.remove('hidden');
+      emptyBox?.classList.add('hidden');
       btnRemove?.classList.remove('hidden');
       this.showToast('แนบรูปภาพสินค้าเรียบร้อยแล้ว', 'success');
     } catch (err) {
@@ -1871,12 +2055,14 @@ const App = {
     const cameraInput = document.getElementById('modal-product-camera-input');
     const previewImg = document.getElementById('modal-product-photo-preview-img');
     const previewContainer = document.getElementById('modal-product-photo-preview-container');
+    const emptyBox = document.getElementById('modal-product-photo-empty');
     const btnRemove = document.getElementById('btn-remove-product-photo');
 
     if (photoInput) photoInput.value = '';
     if (cameraInput) cameraInput.value = '';
     if (previewImg) previewImg.src = '';
     previewContainer?.classList.add('hidden');
+    emptyBox?.classList.remove('hidden');
     btnRemove?.classList.add('hidden');
   },
 
@@ -1934,18 +2120,21 @@ const App = {
     const product = this.products.find(p => p.productId === productId);
     if (!product) return;
 
+    const costVal = Number(product.costPrice) || 0;
+    const saleVal = Number(product.salePrice) || 0;
+
     document.getElementById('modal-product-title').textContent = '✏️ แก้ไขสินค้า';
     const idInput = document.getElementById('modal-product-id');
     idInput.value = product.productId;
     idInput.readOnly = true;
     idInput.classList.remove('border-rose-500', 'ring-1', 'ring-rose-500');
     document.getElementById('modal-product-id-warning')?.classList.add('hidden');
-    document.getElementById('modal-product-name').value = product.productName;
-    document.getElementById('modal-product-category').value = product.category;
-    document.getElementById('modal-product-unit').value = product.unit;
-    document.getElementById('modal-product-cost').value = product.costPrice;
-    document.getElementById('modal-product-sale').value = product.salePrice;
-    document.getElementById('modal-product-stock').value = product.currentStock;
+    document.getElementById('modal-product-name').value = product.productName || '';
+    document.getElementById('modal-product-category').value = product.category || 'ทั่วไป';
+    document.getElementById('modal-product-unit').value = product.unit || 'ชิ้น';
+    document.getElementById('modal-product-cost').value = costVal;
+    document.getElementById('modal-product-sale').value = saleVal;
+    document.getElementById('modal-product-stock').value = Number(product.currentStock) || 0;
 
     const noteInput = document.getElementById('modal-product-note');
     if (noteInput) noteInput.value = product.note || '';
@@ -1955,9 +2144,11 @@ const App = {
       this.currentProductModalPhotoBase64 = product.imageUrl;
       const previewImg = document.getElementById('modal-product-photo-preview-img');
       const previewContainer = document.getElementById('modal-product-photo-preview-container');
+      const emptyBox = document.getElementById('modal-product-photo-empty');
       const btnRemove = document.getElementById('btn-remove-product-photo');
       if (previewImg) previewImg.src = product.imageUrl;
       previewContainer?.classList.remove('hidden');
+      emptyBox?.classList.add('hidden');
       btnRemove?.classList.remove('hidden');
     }
 
@@ -1975,8 +2166,8 @@ const App = {
       }
     }
 
-    const profit = product.salePrice - product.costPrice;
-    const margin = product.salePrice > 0 ? ((profit / product.salePrice) * 100).toFixed(1) : '0.0';
+    const profit = saleVal - costVal;
+    const margin = saleVal > 0 ? ((profit / saleVal) * 100).toFixed(1) : '0.0';
     document.getElementById('modal-profit-preview').textContent = `กำไร: ฿${profit.toLocaleString()} (${margin}%)`;
 
     document.getElementById('product-modal')?.classList.remove('hidden');
